@@ -14,6 +14,12 @@ export default function SignIn() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [debugLog, setDebugLog] = useState<string[]>([]);
+
+    const addLog = (msg: string) => {
+        console.log(msg);
+        setDebugLog(prev => [...prev, `${new Date().toLocaleTimeString()}: ${msg}`]);
+    };
 
     const handleSignIn = async () => {
         if (!email || !password) {
@@ -51,11 +57,15 @@ export default function SignIn() {
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
+        addLog("Starting Google Sign In...");
         try {
             const provider = new GoogleAuthProvider();
+            addLog("Opening popup...");
             const result = await signInWithPopup(auth, provider);
+            addLog(`Popup closed. User: ${result.user.uid}`);
             await checkUserAndRedirect(result.user);
         } catch (error: any) {
+            addLog(`Google Error: ${error.message}`);
             console.error("Google Sign In Error:", error);
             Alert.alert("Google Sign In Failed", error.message);
         } finally {
@@ -65,38 +75,38 @@ export default function SignIn() {
 
 
     const checkUserAndRedirect = async (user: any) => {
-        // console.log("Checking user role for:", user.uid);
-        Alert.alert("Debug", `Auth success! Checking DB for ${user.uid}`);
+        addLog(`Checking DB for user ${user.uid}...`);
 
         try {
             const userDoc = await getDoc(doc(db, "users", user.uid));
-            // console.log("User doc exists:", userDoc.exists());
+            addLog(`Doc exists? ${userDoc.exists()}`);
 
             if (userDoc.exists()) {
                 const userData = userDoc.data();
-                // console.log("User data:", userData);
+                addLog(`User Role: ${userData?.role}`);
 
                 if (userData.role === 'author') {
-                    // console.log("Redirecting to Author Dashboard");
+                    addLog("Redirecting to Author...");
                     router.replace('/dashboard/author');
                 } else if (userData.role === 'reader') {
-                    // console.log("Redirecting to Reader Dashboard");
+                    addLog("Redirecting to Reader...");
                     router.replace('/dashboard/reader');
                 } else {
-                    // console.log("No role found, redirecting to Selection");
+                    addLog("No role. Redirecting to Selection...");
                     router.replace('/role-selection');
                 }
             } else {
-                // console.log("New user, creating profile...");
+                addLog("New user. Creating profile...");
                 // New user via social auth
                 await setDoc(doc(db, "users", user.uid), {
                     email: user.email,
                     createdAt: new Date()
                 });
-                Alert.alert("Debug", "Profile created. Moving to selection.");
+                addLog("Profile created. Redirecting to Selection...");
                 router.replace('/role-selection');
             }
         } catch (error: any) {
+            addLog(`DB Error: ${error.message}`);
             console.error("Error in checkUserAndRedirect:", error);
             Alert.alert("Error", "Failed to get user profile: " + error.message);
         }
@@ -171,6 +181,14 @@ export default function SignIn() {
             >
                 <Text style={{ color: Colors.classic.textSecondary }}>Back to Home</Text>
             </TouchableOpacity>
+
+            {/* ERROR / DEBUG LOG DISPLAY */}
+            <View style={{ marginTop: 20, padding: 10, backgroundColor: '#f0f0f0', borderRadius: 5, width: '100%', maxHeight: 200 }}>
+                <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Debug Logs:</Text>
+                {debugLog.map((log, i) => (
+                    <Text key={i} style={{ fontSize: 10, fontFamily: 'SpaceMono' }}>{log}</Text>
+                ))}
+            </View>
         </SafeAreaView>
     );
 }
