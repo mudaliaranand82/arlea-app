@@ -27,21 +27,23 @@ export const Colors = {
     background: '#ECFDF5',
     text: '#064E3B',
   },
+
+  // Clean Magic Theme (White & Wine Berry)
   classic: {
-    primary: '#F65E2C', // Foam (Orange-Red) - Main Action Color
-    secondary: '#CCFCF0', // Flamingo (Mint) - Backgrounds / Accents
+    primary: '#511545', // Wine Berry (Deep Plum) - Actions/Text
+    secondary: '#FBDBDE', // Azalea (Soft Pink) - Accents/Highlights
+    background: '#FFFFFF', // Pure White - Main Clean Background
+    surface: '#FFFFFF', // White - Cards/Inputs
+    text: '#511545', // Wine Berry - Primary Text
+    textSecondary: '#8E487F', // Lighter Plum - Secondary Text
+    textLight: '#FFFFFF', // White - Text on Primary Buttons
+    border: '#FBDBDE', // Azalea for subtle borders
+    error: '#E53E3E',
 
-    // Neutrals
-    background: '#FFFFFF',
-    surface: '#F8F9FA', // Slightly gray for cards
-    surfaceHighlight: '#F1F3F5',
-
-    // Text
-    text: '#11181C', // Almost Black
-    textSecondary: '#687076', // Slate Grey
-    textLight: '#FFFFFF', // White text on Primary
-
-    // Borders
-    border: '#E6E8EB',
+    // Brand Identity
+    brand: {
+      bg: '#FFFFFF',
+      fg: '#511545',
+    }
   }
 };

@@ -12,10 +12,10 @@ export default function BookSelection() {
     ];
 
     return (
-        <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.reader.background }]}>
-            <ScrollView>
-                <Text style={[GlobalStyles.title, { color: Colors.reader.text }]}>Pick a Book</Text>
-                <Text style={[GlobalStyles.subtitle, { color: Colors.reader.text }]}>
+        <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
+            <ScrollView contentContainerStyle={{ padding: 20 }}>
+                <Text style={[GlobalStyles.title, { color: Colors.classic.primary }]}>Pick a Book</Text>
+                <Text style={[GlobalStyles.subtitle, { color: Colors.classic.textSecondary }]}>
                     Which world do you want to visit first?
                 </Text>
 
@@ -23,11 +23,11 @@ export default function BookSelection() {
                     {books.map((book) => (
                         <TouchableOpacity
                             key={book.id}
-                            style={GlobalStyles.card}
+                            style={[GlobalStyles.card, { borderColor: Colors.classic.border, backgroundColor: Colors.classic.surface }]}
                             onPress={() => router.push('/onboarding/reader/tutorial')}
                         >
-                            <Text style={{ fontSize: 18, fontWeight: 'bold' }}>{book.title}</Text>
-                            <Text style={{ color: '#666' }}>by {book.author}</Text>
+                            <Text style={{ fontSize: 18, fontWeight: 'bold', color: Colors.classic.text, marginBottom: 4 }}>{book.title}</Text>
+                            <Text style={{ color: Colors.classic.textSecondary }}>by {book.author}</Text>
                         </TouchableOpacity>
                     ))}
                 </View>

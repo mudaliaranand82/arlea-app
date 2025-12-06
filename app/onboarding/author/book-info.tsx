@@ -10,31 +10,33 @@ export default function BookInfo() {
     const [genre, setGenre] = useState('');
 
     return (
-        <SafeAreaView style={GlobalStyles.container}>
-            <ScrollView>
-                <Text style={[GlobalStyles.title, { color: Colors.author.primary }]}>Tell us about your book</Text>
-                <Text style={GlobalStyles.subtitle}>This information helps us set up your world.</Text>
+        <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
+            <ScrollView contentContainerStyle={{ padding: 20 }}>
+                <Text style={[GlobalStyles.title, { color: Colors.classic.primary }]}>Tell us about your book</Text>
+                <Text style={[GlobalStyles.subtitle, { color: Colors.classic.textSecondary }]}>This information helps us set up your world.</Text>
 
-                <View style={GlobalStyles.card}>
-                    <Text style={{ marginBottom: 5, fontWeight: '600' }}>Book Title</Text>
+                <View style={[GlobalStyles.card, { borderColor: Colors.classic.border, backgroundColor: Colors.classic.surface }]}>
+                    <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Book Title</Text>
                     <TextInput
                         style={GlobalStyles.input}
                         placeholder="e.g. The Hobbit"
+                        placeholderTextColor="#999"
                         value={title}
                         onChangeText={setTitle}
                     />
 
-                    <Text style={{ marginBottom: 5, fontWeight: '600' }}>Genre</Text>
+                    <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Genre</Text>
                     <TextInput
                         style={GlobalStyles.input}
                         placeholder="e.g. Fantasy"
+                        placeholderTextColor="#999"
                         value={genre}
                         onChangeText={setGenre}
                     />
                 </View>
 
                 <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: Colors.author.primary }]}
+                    style={[GlobalStyles.button, { backgroundColor: Colors.classic.primary }]}
                     onPress={() => router.push('/onboarding/author/template-preview')}
                 >
                     <Text style={GlobalStyles.buttonText}>Next: Character Templates</Text>

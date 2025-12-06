@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import { Colors } from '../../constants/Colors';
 
 interface ActionCardProps {
     backgroundColor: string;
@@ -40,10 +41,11 @@ const styles = StyleSheet.create({
         marginVertical: 10,
         minHeight: 140,
         justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.05)', // Subtle border
-        // Shadow for classic elevation
-        shadowColor: '#000',
+        borderWidth: 1.5, // Slightly thicker for definition
+        borderColor: Colors.classic.border, // Azalea Border
+        backgroundColor: Colors.classic.surface, // White Cards
+        // Soft Shadow
+        shadowColor: Colors.classic.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.05,
         shadowRadius: 12,
@@ -59,11 +61,13 @@ const styles = StyleSheet.create({
         fontSize: 24,
         marginBottom: 8,
         letterSpacing: -0.5,
+        color: Colors.classic.text, // Wine Berry Title
     },
     subtitle: {
         fontFamily: 'Outfit_500Medium',
         fontSize: 16,
         lineHeight: 22,
+        color: Colors.classic.textSecondary,
     },
     circle: {
         position: 'absolute',

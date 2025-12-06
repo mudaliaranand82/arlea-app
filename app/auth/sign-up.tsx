@@ -14,7 +14,6 @@ export default function SignUp() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [role, setRole] = useState<'author' | 'reader'>('reader');
     const [loading, setLoading] = useState(false);
 
     const handleSignUp = async () => {
@@ -34,21 +33,16 @@ export default function SignUp() {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             console.log("User created:", userCredential.user.uid);
 
-            // Save user profile to Firestore
+            // Save user profile to Firestore (without role initially)
             await setDoc(doc(db, "users", userCredential.user.uid), {
                 email: email,
-                role: role,
                 createdAt: new Date()
             });
             console.log("User profile saved to Firestore");
 
-            // Navigate based on role
-            console.log("Navigating to:", role === 'author' ? '/dashboard/author' : '/dashboard/reader');
-            if (role === 'author') {
-                router.replace('/dashboard/author');
-            } else {
-                router.replace('/dashboard/reader');
-            }
+            // Navigate to Role Selection
+            router.replace('/role-selection');
+
         } catch (error: any) {
             console.error("Sign Up Error:", error);
             Alert.alert("Registration Failed", error.message);
@@ -57,66 +51,50 @@ export default function SignUp() {
         }
     };
 
+
     return (
-        <SafeAreaView style={[GlobalStyles.container, { justifyContent: 'center' }]}>
+        <SafeAreaView style={[GlobalStyles.container, { justifyContent: 'center', backgroundColor: Colors.classic.background }]}>
             <View style={{ marginBottom: 30 }}>
-                <Text style={[GlobalStyles.title, { color: Colors.author.primary, textAlign: 'center' }]}>Create Account</Text>
-                <Text style={[GlobalStyles.subtitle, { textAlign: 'center' }]}>Join Arlea today</Text>
+                <Text style={[GlobalStyles.title, { color: Colors.classic.primary, textAlign: 'center' }]}>Create Account</Text>
+                <Text style={[GlobalStyles.subtitle, { textAlign: 'center', color: Colors.classic.textSecondary }]}>Join Arlea today</Text>
             </View>
 
             <View style={GlobalStyles.card}>
-                <Text style={{ marginBottom: 5, fontWeight: '600' }}>Email</Text>
+                <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Email</Text>
                 <TextInput
                     style={GlobalStyles.input}
                     placeholder="hello@example.com"
+                    placeholderTextColor="#999"
                     value={email}
                     onChangeText={setEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
                 />
 
-                <Text style={{ marginBottom: 5, fontWeight: '600' }}>Password</Text>
+                <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Password</Text>
                 <TextInput
                     style={GlobalStyles.input}
                     placeholder="********"
+                    placeholderTextColor="#999"
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry
                 />
 
-                <Text style={{ marginBottom: 5, fontWeight: '600' }}>Confirm Password</Text>
+                <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Confirm Password</Text>
                 <TextInput
                     style={GlobalStyles.input}
                     placeholder="********"
+                    placeholderTextColor="#999"
                     value={confirmPassword}
                     onChangeText={setConfirmPassword}
                     secureTextEntry
                 />
 
-                <Text style={{ marginBottom: 5, fontWeight: '600' }}>I am a...</Text>
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 15 }}>
-                    <TouchableOpacity
-                        style={[
-                            GlobalStyles.card,
-                            { flex: 1, padding: 10, backgroundColor: role === 'reader' ? Colors.reader.primary : '#f0f0f0', alignItems: 'center' }
-                        ]}
-                        onPress={() => setRole('reader')}
-                    >
-                        <Text style={{ color: role === 'reader' ? 'white' : 'black', fontWeight: 'bold' }}>Reader</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[
-                            GlobalStyles.card,
-                            { flex: 1, padding: 10, backgroundColor: role === 'author' ? Colors.author.primary : '#f0f0f0', alignItems: 'center' }
-                        ]}
-                        onPress={() => setRole('author')}
-                    >
-                        <Text style={{ color: role === 'author' ? 'white' : 'black', fontWeight: 'bold' }}>Author</Text>
-                    </TouchableOpacity>
-                </View>
+
 
                 <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: role === 'author' ? Colors.author.primary : Colors.reader.primary, marginTop: 10 }]}
+                    style={[GlobalStyles.button, { backgroundColor: Colors.classic.primary, marginTop: 10 }]}
                     onPress={handleSignUp}
                     disabled={loading}
                 >
@@ -124,16 +102,16 @@ export default function SignUp() {
                 </TouchableOpacity>
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 20 }}>
-                    <View style={{ flex: 1, height: 1, backgroundColor: '#ccc' }} />
-                    <Text style={{ marginHorizontal: 10, color: '#666' }}>OR</Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: '#ccc' }} />
+                    <View style={{ flex: 1, height: 1, backgroundColor: Colors.classic.border }} />
+                    <Text style={{ marginHorizontal: 10, color: Colors.classic.textSecondary }}>OR</Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: Colors.classic.border }} />
                 </View>
 
                 <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: 'white', borderWidth: 1, borderColor: '#ccc', marginBottom: 10 }]}
+                    style={[GlobalStyles.button, { backgroundColor: 'white', borderWidth: 1, borderColor: Colors.classic.border, marginBottom: 10 }]}
                     onPress={() => alert("Google Auth not configured yet (requires Client ID)")}
                 >
-                    <Text style={[GlobalStyles.buttonText, { color: 'black' }]}>Continue with Google</Text>
+                    <Text style={[GlobalStyles.buttonText, { color: Colors.classic.text }]}>Continue with Google</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -145,9 +123,9 @@ export default function SignUp() {
             </View>
 
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 20 }}>
-                <Text style={{ color: '#666' }}>Already have an account? </Text>
+                <Text style={{ color: Colors.classic.textSecondary }}>Already have an account? </Text>
                 <TouchableOpacity onPress={() => router.push('/auth/sign-in')}>
-                    <Text style={{ color: Colors.author.primary, fontWeight: 'bold' }}>Sign In</Text>
+                    <Text style={{ color: Colors.classic.primary, fontWeight: 'bold' }}>Sign In</Text>
                 </TouchableOpacity>
             </View>
 
@@ -155,7 +133,7 @@ export default function SignUp() {
                 style={{ marginTop: 40, alignSelf: 'center' }}
                 onPress={() => router.back()}
             >
-                <Text style={{ color: '#999' }}>Back to Home</Text>
+                <Text style={{ color: Colors.classic.textSecondary }}>Back to Home</Text>
             </TouchableOpacity>
         </SafeAreaView>
     );

@@ -1,70 +1,153 @@
 import { router } from 'expo-router';
-import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { RoleSelection } from '../components/ui/RoleSelection';
+import React, { useRef, useState } from 'react';
+import { Dimensions, FlatList, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { useSharedValue } from 'react-native-reanimated';
 import { Colors } from '../constants/Colors';
 import { GlobalStyles } from '../constants/Theme';
 
+const { width } = Dimensions.get('window');
+
+const SLIDES = [
+    {
+        id: '1',
+        title: 'Where stories come alive.',
+        subtitle: 'Experience books like never before with interactive characters and worlds.',
+        image: require('../assets/images/onboarding-1.png'),
+    },
+    {
+        id: '2',
+        title: 'Create your universe.',
+        subtitle: 'Authors can build rich worlds and characters that readers can interact with.',
+        image: require('../assets/images/onboarding-2.png'),
+    },
+    {
+        id: '3',
+        title: 'Chat with characters.',
+        subtitle: 'Don\'t just read the story. Talk to the protagonist and shape the narrative.',
+        image: require('../assets/images/onboarding-3.png'),
+    },
+];
+
 export default function WelcomeScreen() {
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const scrollX = useSharedValue(0);
+    const flatListRef = useRef<FlatList>(null);
+
+    const onScroll = (event: any) => {
+        scrollX.value = event.nativeEvent.contentOffset.x;
+        const index = Math.round(event.nativeEvent.contentOffset.x / width);
+        setCurrentIndex(index);
+    };
+
     return (
         <View style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
             <StatusBar barStyle="dark-content" />
-            <SafeAreaView style={styles.safeArea}>
-                <View style={styles.header}>
-                    <Text style={[styles.logo, { color: Colors.classic.primary }]}>Arlea</Text>
-                    <Text style={[styles.tagline, { color: Colors.classic.textSecondary }]}>Where books come alive.</Text>
+
+            {/* Background Gradient Placeholder - In a real app, uses LinearGradient */}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.classic.background }]}>
+                {/* 
+                   Dynamic background color based on slide could go here using Animated styles 
+                   For now, we keep a clean premium background.
+                */}
+            </View>
+
+            <Animated.FlatList
+                ref={flatListRef}
+                data={SLIDES}
+                keyExtractor={(item) => item.id}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onScroll={onScroll}
+                scrollEventThrottle={16}
+                renderItem={({ item }) => (
+                    <View style={{ width, flex: 1, justifyContent: 'center', paddingHorizontal: 30 }}>
+                        <Animated.Image
+                            source={item.image}
+                            style={styles.image}
+                            resizeMode="contain"
+                        />
+                        <Text style={styles.title}>{item.title}</Text>
+                        <Text style={styles.subtitle}>{item.subtitle}</Text>
+                    </View>
+                )}
+            />
+
+            <View style={styles.footer}>
+                {/* Pagination Dots */}
+                <View style={styles.pagination}>
+                    {SLIDES.map((_, index) => {
+                        const isActive = index === currentIndex;
+                        return (
+                            <View
+                                key={index}
+                                style={[
+                                    styles.dot,
+                                    { backgroundColor: isActive ? Colors.classic.primary : Colors.classic.border }
+                                ]}
+                            />
+                        );
+                    })}
                 </View>
 
-                <View style={styles.content}>
-                    <RoleSelection />
-                </View>
+                {/* Buttons */}
+                <View style={styles.buttonContainer}>
+                    <TouchableOpacity
+                        style={[GlobalStyles.button, { backgroundColor: Colors.classic.primary, marginBottom: 15, width: '100%' }]}
+                        onPress={() => router.push('/auth/sign-up')}
+                    >
+                        <Text style={GlobalStyles.buttonText}>Join for Free</Text>
+                    </TouchableOpacity>
 
-                <View style={styles.footer}>
-                    <TouchableOpacity onPress={() => router.push('/auth/sign-in')}>
-                        <Text style={[styles.signInText, { color: Colors.classic.textSecondary }]}>
-                            Already have an account? <Text style={[styles.signInLink, { color: Colors.classic.primary }]}>Sign In</Text>
-                        </Text>
+                    <TouchableOpacity
+                        style={[GlobalStyles.button, { backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.classic.primary, width: '100%' }]}
+                        onPress={() => router.push('/auth/sign-in')}
+                    >
+                        <Text style={[GlobalStyles.buttonText, { color: Colors.classic.primary }]}>Log In</Text>
                     </TouchableOpacity>
                 </View>
-            </SafeAreaView>
+            </View>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        paddingHorizontal: 24,
-        justifyContent: 'space-between',
+    image: {
+        width: '100%',
+        height: 350,
+        marginBottom: 40,
     },
-    header: {
-        marginTop: 60,
-        alignItems: 'center',
-    },
-    logo: {
+    title: {
         fontFamily: 'Outfit_700Bold',
-        fontSize: 56,
-        marginBottom: 8,
+        fontSize: 48,
+        color: Colors.classic.text,
+        marginBottom: 20,
         letterSpacing: -1,
+        lineHeight: 56,
     },
-    tagline: {
-        fontFamily: 'Outfit_500Medium',
+    subtitle: {
+        fontFamily: 'Outfit_400Regular',
         fontSize: 20,
-        textAlign: 'center',
-    },
-    content: {
-        flex: 1,
-        justifyContent: 'center',
+        color: Colors.classic.textSecondary,
+        lineHeight: 28,
     },
     footer: {
-        marginBottom: 40,
+        paddingHorizontal: 24,
+        paddingBottom: 50,
         alignItems: 'center',
     },
-    signInText: {
-        fontFamily: 'Outfit_500Medium',
-        fontSize: 16,
+    pagination: {
+        flexDirection: 'row',
+        marginBottom: 30,
+        gap: 10,
     },
-    signInLink: {
-        fontFamily: 'Outfit_700Bold',
+    dot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+    },
+    buttonContainer: {
+        width: '100%',
+        alignItems: 'center',
     }
 });
