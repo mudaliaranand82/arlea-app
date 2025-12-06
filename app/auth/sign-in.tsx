@@ -8,7 +8,7 @@ import { GlobalStyles } from '../../constants/Theme';
 import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
-import { auth, db } from '../../firebaseConfig';
+import { auth, db, firebaseConfig } from '../../firebaseConfig';
 
 export default function SignIn() {
     const [email, setEmail] = useState('');
@@ -58,6 +58,7 @@ export default function SignIn() {
     const handleGoogleSignIn = async () => {
         setLoading(true);
         addLog("Starting Google Sign In...");
+        addLog(`API Key Configured: ${firebaseConfig.apiKey ? "YES (" + firebaseConfig.apiKey.substring(0, 4) + "...)" : "NO"}`);
         try {
             const provider = new GoogleAuthProvider();
             addLog("Opening popup...");
@@ -78,7 +79,21 @@ export default function SignIn() {
         addLog(`Checking DB for user ${user.uid}...`);
 
         try {
-            const userDoc = await getDoc(doc(db, "users", user.uid));
+            // Log config presence just to be sure
+            addLog(`DB Instance: ${db ? 'Initialized' : 'MISSING'}`);
+            addLog(`Project ID: ${firebaseConfig.projectId}`);
+
+            // Timeout promise
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Firestore operation timed out (10s)")), 10000)
+            );
+
+            // Race getDoc against timeout
+            const userDoc: any = await Promise.race([
+                getDoc(doc(db, "users", user.uid)),
+                timeout
+            ]);
+
             addLog(`Doc exists? ${userDoc.exists()}`);
 
             if (userDoc.exists()) {
