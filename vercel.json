@@ -1,5 +1,4 @@
 {
-    "framework": "expo",
     "buildCommand": "expo export",
     "outputDirectory": "dist"
 }
