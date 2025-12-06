@@ -5,8 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/Colors';
 import { GlobalStyles } from '../../constants/Theme';
 
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
@@ -48,6 +48,48 @@ export default function SignUp() {
             Alert.alert("Registration Failed", error.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleGoogleSignIn = async () => {
+        setLoading(true);
+        try {
+            const provider = new GoogleAuthProvider();
+            const result = await signInWithPopup(auth, provider);
+            await checkUserAndRedirect(result.user);
+        } catch (error: any) {
+            console.error("Google Sign Up Error:", error);
+            Alert.alert("Google Sign Up Failed", error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
+    const checkUserAndRedirect = async (user: any) => {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+
+        if (!userDoc.exists()) {
+            // Create user profile
+            await setDoc(doc(db, "users", user.uid), {
+                email: user.email,
+                createdAt: new Date()
+            });
+        }
+
+        // Always redirect to role selection for new/social sign ups that haven't selected a role, 
+        // or dashboard if they already have one.
+        if (userDoc.exists()) {
+            const userData = userDoc.data();
+            if (userData.role === 'author') {
+                router.replace('/dashboard/author');
+            } else if (userData.role === 'reader') {
+                router.replace('/dashboard/reader');
+            } else {
+                router.replace('/role-selection');
+            }
+        } else {
+            router.replace('/role-selection');
         }
     };
 
@@ -109,17 +151,12 @@ export default function SignUp() {
 
                 <TouchableOpacity
                     style={[GlobalStyles.button, { backgroundColor: 'white', borderWidth: 1, borderColor: Colors.classic.border, marginBottom: 10 }]}
-                    onPress={() => alert("Google Auth not configured yet (requires Client ID)")}
+                    onPress={handleGoogleSignIn}
+                    disabled={loading}
                 >
                     <Text style={[GlobalStyles.buttonText, { color: Colors.classic.text }]}>Continue with Google</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: 'black' }]}
-                    onPress={() => alert("Apple Auth requires native device")}
-                >
-                    <Text style={[GlobalStyles.buttonText, { color: 'white' }]}>Continue with Apple</Text>
-                </TouchableOpacity>
             </View>
 
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 20 }}>

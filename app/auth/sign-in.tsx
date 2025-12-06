@@ -5,8 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/Colors';
 import { GlobalStyles } from '../../constants/Theme';
 
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Alert } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
@@ -46,6 +46,57 @@ export default function SignIn() {
             Alert.alert("Login Failed", error.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleGoogleSignIn = async () => {
+        setLoading(true);
+        try {
+            const provider = new GoogleAuthProvider();
+            const result = await signInWithPopup(auth, provider);
+            await checkUserAndRedirect(result.user);
+        } catch (error: any) {
+            console.error("Google Sign In Error:", error);
+            Alert.alert("Google Sign In Failed", error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
+    const checkUserAndRedirect = async (user: any) => {
+        console.log("Checking user role for:", user.uid);
+        try {
+            const userDoc = await getDoc(doc(db, "users", user.uid));
+            console.log("User doc exists:", userDoc.exists());
+
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                console.log("User data:", userData);
+
+                if (userData.role === 'author') {
+                    console.log("Redirecting to Author Dashboard");
+                    router.replace('/dashboard/author');
+                } else if (userData.role === 'reader') {
+                    console.log("Redirecting to Reader Dashboard");
+                    router.replace('/dashboard/reader');
+                } else {
+                    console.log("No role found, redirecting to Selection");
+                    router.replace('/role-selection');
+                }
+            } else {
+                console.log("New user, creating profile...");
+                // New user via social auth
+                await setDoc(doc(db, "users", user.uid), {
+                    email: user.email,
+                    createdAt: new Date()
+                });
+                console.log("Profile created, redirecting to Selection");
+                router.replace('/role-selection');
+            }
+        } catch (error) {
+            console.error("Error in checkUserAndRedirect:", error);
+            Alert.alert("Error", "Failed to get user profile");
         }
     };
 
@@ -97,17 +148,12 @@ export default function SignIn() {
 
                 <TouchableOpacity
                     style={[GlobalStyles.button, { backgroundColor: 'white', borderWidth: 1, borderColor: Colors.classic.border, marginBottom: 10 }]}
-                    onPress={() => alert("Google Auth not configured yet (requires Client ID)")}
+                    onPress={handleGoogleSignIn}
+                    disabled={loading}
                 >
                     <Text style={[GlobalStyles.buttonText, { color: Colors.classic.text }]}>Continue with Google</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: 'black' }]}
-                    onPress={() => alert("Apple Auth requires native device")}
-                >
-                    <Text style={[GlobalStyles.buttonText, { color: 'white' }]}>Continue with Apple</Text>
-                </TouchableOpacity>
             </View>
 
             <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 20 }}>
