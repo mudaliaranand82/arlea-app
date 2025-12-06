@@ -84,6 +84,7 @@ export default function SignIn() {
             addLog(`Project ID: ${firebaseConfig.projectId}`);
 
             // Timeout promise
+            addLog("Starting race against timeout...");
             const timeout = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error("Firestore operation timed out (10s)")), 10000)
             );
