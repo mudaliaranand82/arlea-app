@@ -65,38 +65,40 @@ export default function SignIn() {
 
 
     const checkUserAndRedirect = async (user: any) => {
-        console.log("Checking user role for:", user.uid);
+        // console.log("Checking user role for:", user.uid);
+        Alert.alert("Debug", `Auth success! Checking DB for ${user.uid}`);
+
         try {
             const userDoc = await getDoc(doc(db, "users", user.uid));
-            console.log("User doc exists:", userDoc.exists());
+            // console.log("User doc exists:", userDoc.exists());
 
             if (userDoc.exists()) {
                 const userData = userDoc.data();
-                console.log("User data:", userData);
+                // console.log("User data:", userData);
 
                 if (userData.role === 'author') {
-                    console.log("Redirecting to Author Dashboard");
+                    // console.log("Redirecting to Author Dashboard");
                     router.replace('/dashboard/author');
                 } else if (userData.role === 'reader') {
-                    console.log("Redirecting to Reader Dashboard");
+                    // console.log("Redirecting to Reader Dashboard");
                     router.replace('/dashboard/reader');
                 } else {
-                    console.log("No role found, redirecting to Selection");
+                    // console.log("No role found, redirecting to Selection");
                     router.replace('/role-selection');
                 }
             } else {
-                console.log("New user, creating profile...");
+                // console.log("New user, creating profile...");
                 // New user via social auth
                 await setDoc(doc(db, "users", user.uid), {
                     email: user.email,
                     createdAt: new Date()
                 });
-                console.log("Profile created, redirecting to Selection");
+                Alert.alert("Debug", "Profile created. Moving to selection.");
                 router.replace('/role-selection');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error in checkUserAndRedirect:", error);
-            Alert.alert("Error", "Failed to get user profile");
+            Alert.alert("Error", "Failed to get user profile: " + error.message);
         }
     };
 

@@ -4,6 +4,7 @@ import { Dimensions, FlatList, StatusBar, StyleSheet, Text, TouchableOpacity, Vi
 import Animated, { useSharedValue } from 'react-native-reanimated';
 import { Colors } from '../constants/Colors';
 import { GlobalStyles } from '../constants/Theme';
+import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -32,6 +33,42 @@ export default function WelcomeScreen() {
     const [currentIndex, setCurrentIndex] = useState(0);
     const scrollX = useSharedValue(0);
     const flatListRef = useRef<FlatList>(null);
+
+    const scrollX = useSharedValue(0);
+    const flatListRef = useRef<FlatList>(null);
+
+    // Auto-redirect if logged in
+    const { user, loading } = useAuth();
+
+    React.useEffect(() => {
+        if (!loading && user) {
+            // Logic to check role and redirect could be centralized, but putting it here for now
+            // to ensure users are sent to the right place.
+            // We can assume if they are here, we might need to fetch the role again or 
+            // let them click Login and be instantly redirected? 
+            // Ideally auto-redirect:
+            checkUserRole(user.uid);
+        }
+    }, [user, loading]);
+
+    const checkUserRole = async (uid: string) => {
+        try {
+            const { getDoc, doc } = await import('firebase/firestore');
+            const { db } = await import('../firebaseConfig');
+
+            const userDoc = await getDoc(doc(db, "users", uid));
+            if (userDoc.exists()) {
+                const data = userDoc.data();
+                if (data.role === 'author') router.replace('/dashboard/author');
+                else if (data.role === 'reader') router.replace('/dashboard/reader');
+                else router.replace('/role-selection');
+            } else {
+                router.replace('/role-selection');
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
     const onScroll = (event: any) => {
         scrollX.value = event.nativeEvent.contentOffset.x;
