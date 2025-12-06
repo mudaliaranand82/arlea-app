@@ -132,6 +132,7 @@ export default function SignIn() {
         <SafeAreaView style={[GlobalStyles.container, { justifyContent: 'center', backgroundColor: Colors.classic.background }]}>
             <View style={{ marginBottom: 30 }}>
                 <Text style={[GlobalStyles.title, { color: Colors.classic.primary, textAlign: 'center' }]}>Welcome Back</Text>
+                <Text style={{ textAlign: 'center', fontSize: 10, color: 'gray' }}>v1.2 (Long Polling)</Text>
                 <Text style={[GlobalStyles.subtitle, { textAlign: 'center', color: Colors.classic.textSecondary }]}>Sign in to continue your journey</Text>
             </View>
 
