@@ -34,9 +34,6 @@ export default function WelcomeScreen() {
     const scrollX = useSharedValue(0);
     const flatListRef = useRef<FlatList>(null);
 
-    const scrollX = useSharedValue(0);
-    const flatListRef = useRef<FlatList>(null);
-
     // Auto-redirect if logged in
     const { user, loading } = useAuth();
 
