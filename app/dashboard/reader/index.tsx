@@ -1,73 +1,107 @@
 import { router } from 'expo-router';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
-
-import { collection, getDocs, limit, query } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useAuth } from '../../../context/AuthContext';
 import { db } from '../../../firebaseConfig';
 
 export default function ReaderDashboard() {
-    const [recentBooks, setRecentBooks] = useState<any[]>([]);
+    const { user, loading } = useAuth();
+    const [books, setBooks] = useState<any[]>([]);
+    const [characters, setCharacters] = useState<any[]>([]);
 
     useEffect(() => {
-        const fetchBooks = async () => {
-            const q = query(collection(db, "books"), limit(5));
-            const snapshot = await getDocs(q);
+        if (!user) return;
+
+        // 1. Listen to ALL books (Public Library style for now)
+        // In a real app, you might filter by "published" or "public"
+        const booksQ = query(collection(db, "books"));
+        const unsubBooks = onSnapshot(booksQ, (snapshot) => {
             const booksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setRecentBooks(booksData);
+            setBooks(booksData);
+        });
+
+        // 2. Listen to ALL characters
+        const charsQ = query(collection(db, "characters"));
+        const unsubChars = onSnapshot(charsQ, (snapshot) => {
+            const charsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setCharacters(charsData);
+        });
+
+        return () => {
+            unsubBooks();
+            unsubChars();
         };
-        fetchBooks();
-    }, []);
+    }, [user]);
+
+    const getCharactersForBook = (bookId: string) => {
+        return characters.filter(c => c.bookId === bookId);
+    };
 
     return (
-        <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.reader.background }]}>
-            <ScrollView>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <Text style={[GlobalStyles.title, { color: Colors.reader.text, marginBottom: 0 }]}>My Library</Text>
-                    <View style={{ flexDirection: 'row', gap: 15 }}>
-                        <TouchableOpacity onPress={() => router.push('/dashboard/reader/library')}>
-                            <Text style={{ color: Colors.reader.primary }}>See All</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => router.push('/')}>
-                            <Text style={{ color: '#666' }}>Log Out</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
+        <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
+            <View style={{ padding: 20 }}>
+                <Text style={[GlobalStyles.title, { color: Colors.classic.primary }]}>Explore Worlds</Text>
+                <Text style={[GlobalStyles.subtitle, { color: Colors.classic.textSecondary }]}>
+                    Choose a character to start your journey.
+                </Text>
+            </View>
 
-                <View style={{ marginBottom: 30 }}>
-                    <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: Colors.reader.text }}>Continue Reading</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 15 }}>
-                        {recentBooks.map((book) => (
-                            <TouchableOpacity
-                                key={book.id}
-                                style={[GlobalStyles.card, { width: 160, marginRight: 0 }]}
-                                onPress={() => router.push(`/chat/${book.id}`)}
-                            >
-                                <View style={{ height: 100, backgroundColor: '#eee', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 10 }}>
-                                    <Text style={{ fontSize: 40 }}>{book.cover}</Text>
-                                </View>
-                                <Text style={{ fontWeight: 'bold', fontSize: 16 }} numberOfLines={1}>{book.title}</Text>
-                                <Text style={{ color: '#666', fontSize: 12 }}>{book.author}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </View>
+            <FlatList
+                data={books}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ padding: 20, paddingTop: 0 }}
+                renderItem={({ item: book }) => {
+                    const bookChars = getCharactersForBook(book.id);
+                    if (bookChars.length === 0) return null; // Skip empty books
 
-                <View>
-                    <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: Colors.reader.text }}>Explore</Text>
-                    <TouchableOpacity style={[GlobalStyles.card, { flexDirection: 'row', alignItems: 'center', gap: 15 }]}>
-                        <View style={{ width: 50, height: 50, backgroundColor: Colors.reader.primary, borderRadius: 25, justifyContent: 'center', alignItems: 'center' }}>
-                            <Text style={{ fontSize: 24, color: 'white' }}>🔍</Text>
+                    return (
+                        <View style={{ marginBottom: 30 }}>
+                            <Text style={{ fontFamily: 'Outfit_600SemiBold', fontSize: 20, color: Colors.classic.text, marginBottom: 10 }}>
+                                {book.title} <Text style={{ fontSize: 14, color: '#999', fontWeight: 'normal' }}>({book.genre})</Text>
+                            </Text>
+
+                            {/* Horizontal scroll for characters within a book */}
+                            <FlatList
+                                data={bookChars}
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                keyExtractor={(c) => c.id}
+                                renderItem={({ item: char }) => (
+                                    <TouchableOpacity
+                                        style={{
+                                            marginRight: 15,
+                                            backgroundColor: Colors.classic.surface,
+                                            padding: 15,
+                                            borderRadius: 16,
+                                            borderWidth: 1,
+                                            borderColor: Colors.classic.border,
+                                            width: 140,
+                                            alignItems: 'center'
+                                        }}
+                                        onPress={() => router.push(`/reader/chat/${char.id}`)}
+                                    >
+                                        <View style={{
+                                            width: 60, height: 60, borderRadius: 30, backgroundColor: Colors.classic.primary + '20',
+                                            justifyContent: 'center', alignItems: 'center', marginBottom: 10,
+                                        }}>
+                                            <Text style={{ fontSize: 24 }}>👤</Text>
+                                        </View>
+                                        <Text style={{ fontFamily: 'Outfit_600SemiBold', color: Colors.classic.text, textAlign: 'center' }}>
+                                            {char.name}
+                                        </Text>
+                                        <Text style={{ fontFamily: 'Outfit_400Regular', color: Colors.classic.textSecondary, fontSize: 12, textAlign: 'center' }}>
+                                            {char.role}
+                                        </Text>
+                                    </TouchableOpacity>
+                                )}
+                            />
                         </View>
-                        <View>
-                            <Text style={{ fontWeight: 'bold', fontSize: 16 }}>Find New Books</Text>
-                            <Text style={{ color: '#666' }}>Browse the collection</Text>
-                        </View>
-                    </TouchableOpacity>
-                </View>
-            </ScrollView>
+                    );
+                }}
+            />
         </SafeAreaView>
     );
 }
