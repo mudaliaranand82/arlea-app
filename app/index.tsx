@@ -148,6 +148,24 @@ export default function WelcomeScreen() {
                         <Text style={[GlobalStyles.buttonText, { color: Colors.classic.primary }]}>Log In</Text>
                     </TouchableOpacity>
                 </View>
+
+                {/* Dev Tool: Reset App */}
+                <TouchableOpacity
+                    style={{ marginTop: 20 }}
+                    onPress={async () => {
+                        try {
+                            await signOut(auth);
+                            router.replace('/');
+                            alert("App State Reset. You can now test 'New User' flow.");
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }}
+                >
+                    <Text style={{ fontFamily: 'Outfit_400Regular', color: Colors.classic.textSecondary, fontSize: 12, textDecorationLine: 'underline' }}>
+                        Dev: Reset App Data
+                    </Text>
+                </TouchableOpacity>
             </View>
         </View>
     );
