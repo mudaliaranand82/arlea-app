@@ -103,11 +103,21 @@ export default function SignIn() {
 
                 if (userData.role === 'author') {
                     addLog("Checking for existing books...");
+
+                    // Timeout for books query
+                    const bookTimeout = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error("Book query timed out")), 10000)
+                    );
+
                     const booksQ = query(collection(db, "books"), where("authorId", "==", user.uid), limit(1));
-                    const booksSnap = await getDocs(booksQ);
+
+                    const booksSnap: any = await Promise.race([
+                        getDocs(booksQ),
+                        bookTimeout
+                    ]);
 
                     if (!booksSnap.empty) {
-                        addLog("Has books. Redirecting to Dashboard...");
+                        addLog("Has books. Redirecting...");
                         router.replace('/dashboard/author');
                     } else {
                         addLog("No books. Redirecting to Onboarding...");
