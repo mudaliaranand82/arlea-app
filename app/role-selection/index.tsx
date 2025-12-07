@@ -12,6 +12,11 @@ import { db } from '../../firebaseConfig';
 export default function RoleSelectionScreen() {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [debugLog, setDebugLog] = useState<string[]>([]);
+
+    const addLog = (msg: string) => {
+        setDebugLog(prev => [...prev, `${new Date().toLocaleTimeString()}: ${msg}`]);
+    };
 
     const handleRoleSelect = async (role: 'author' | 'reader') => {
         if (!user) {
@@ -20,21 +25,37 @@ export default function RoleSelectionScreen() {
         }
 
         setLoading(true);
+        addLog(`Selecting role: ${role}`);
+
         try {
             const userRef = doc(db, "users", user.uid);
-            await updateDoc(userRef, {
-                role: role
-            });
+            addLog("Doc ref created. Updating...");
+
+            // Timeout promise
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Firestore update timed out")), 10000)
+            );
+
+            // Race updateDoc against timeout
+            await Promise.race([
+                updateDoc(userRef, { role: role }),
+                timeout
+            ]);
+
+            addLog("Update successful!");
 
             // Redirect to the role-specific onboarding welcome screen
             if (role === 'author') {
+                addLog("Redirecting to Author Welcome...");
                 router.replace('/onboarding/author/welcome');
             } else {
+                addLog("Redirecting to Reader Welcome...");
                 router.replace('/onboarding/reader/welcome');
             }
         } catch (error: any) {
             console.error("Error updating role:", error);
-            Alert.alert("Error", "Failed to save your selection. Please try again.");
+            addLog(`Error: ${error.message}`);
+            Alert.alert("Error", "Failed to save your selection. " + error.message);
         } finally {
             setLoading(false);
         }
@@ -72,6 +93,14 @@ export default function RoleSelectionScreen() {
                     <Text style={styles.loadingText}>Setting up your profile...</Text>
                 </View>
             )}
+
+            {/* ERROR / DEBUG LOG DISPLAY */}
+            <View style={{ marginTop: 20, padding: 10, backgroundColor: '#f0f0f0', borderRadius: 5, width: '100%', maxHeight: 150, alignSelf: 'center', opacity: debugLog.length > 0 ? 1 : 0 }}>
+                <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Debug Logs:</Text>
+                {debugLog.map((log, i) => (
+                    <Text key={i} style={{ fontSize: 10, fontFamily: 'SpaceMono' }}>{log}</Text>
+                ))}
+            </View>
         </SafeAreaView>
     );
 }
