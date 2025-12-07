@@ -1,13 +1,51 @@
 import { router } from 'expo-router';
+import { addDoc, collection } from 'firebase/firestore';
 import { useState } from 'react';
-import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
+import { useAuth } from '../../../context/AuthContext';
+import { db } from '../../../firebaseConfig';
+
+const GENRES = ["Fantasy", "Sci-Fi", "Mystery", "Romance", "Thriller", "Horror", "Historical Fiction", "Non-Fiction", "Other"];
 
 export default function BookInfo() {
+    const { user } = useAuth();
     const [title, setTitle] = useState('');
     const [genre, setGenre] = useState('');
+    const [showGenreModal, setShowGenreModal] = useState(false);
+    const [loading, setLoading] = useState(false);
+
+    const handleNext = async () => {
+        if (!title || !genre) {
+            Alert.alert("Missing Info", "Please enter a title and select a genre.");
+            return;
+        }
+
+        if (!user) {
+            Alert.alert("Error", "You must be logged in.");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const docRef = await addDoc(collection(db, "books"), {
+                title,
+                genre,
+                authorId: user.uid,
+                createdAt: new Date(),
+                cover: "📚" // Default placeholder
+            });
+            console.log("Book created with ID: ", docRef.id);
+            router.push({ pathname: '/onboarding/author/create-character', params: { bookId: docRef.id } });
+        } catch (e: any) {
+            console.error("Error adding book: ", e);
+            Alert.alert("Error", "Failed to save book: " + e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
@@ -26,20 +64,45 @@ export default function BookInfo() {
                     />
 
                     <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Genre</Text>
-                    <TextInput
-                        style={GlobalStyles.input}
-                        placeholder="e.g. Fantasy"
-                        placeholderTextColor="#999"
-                        value={genre}
-                        onChangeText={setGenre}
-                    />
+                    <TouchableOpacity
+                        style={[GlobalStyles.input, { justifyContent: 'center' }]}
+                        onPress={() => setShowGenreModal(true)}
+                    >
+                        <Text style={{ color: genre ? Colors.classic.text : '#999' }}>{genre || "Select a genre"}</Text>
+                    </TouchableOpacity>
                 </View>
 
+                <Modal visible={showGenreModal} animationType="slide" transparent={true}>
+                    <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <View style={{ backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '50%' }}>
+                            <Text style={[GlobalStyles.heading, { textAlign: 'center' }]}>Select Genre</Text>
+                            <ScrollView>
+                                {GENRES.map(g => (
+                                    <TouchableOpacity
+                                        key={g}
+                                        style={{ padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee' }}
+                                        onPress={() => {
+                                            setGenre(g);
+                                            setShowGenreModal(false);
+                                        }}
+                                    >
+                                        <Text style={{ fontSize: 16, color: Colors.classic.text, textAlign: 'center' }}>{g}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                            <TouchableOpacity style={{ marginTop: 10, alignSelf: 'center' }} onPress={() => setShowGenreModal(false)}>
+                                <Text style={{ color: Colors.classic.textSecondary }}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Modal>
+
                 <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: Colors.classic.primary }]}
-                    onPress={() => router.push('/onboarding/author/template-preview')}
+                    style={[GlobalStyles.button, { backgroundColor: Colors.classic.primary, opacity: loading ? 0.7 : 1 }]}
+                    onPress={handleNext}
+                    disabled={loading}
                 >
-                    <Text style={GlobalStyles.buttonText}>Next: Character Templates</Text>
+                    <Text style={GlobalStyles.buttonText}>{loading ? "Saving..." : "Create Book & Continue"}</Text>
                 </TouchableOpacity>
             </ScrollView>
         </SafeAreaView>

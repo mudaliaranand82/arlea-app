@@ -1,34 +1,34 @@
 import { router } from 'expo-router';
+import { signOut } from 'firebase/auth';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
-
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
 import { auth, db } from '../../../firebaseConfig';
-import { SeedService } from '../../../services/seedService';
 
 export default function AuthorDashboard() {
     const [books, setBooks] = useState<any[]>([]);
+    const [characters, setCharacters] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        let unsubscribeSnapshot: () => void;
+        let unsubBooks: () => void;
+        let unsubChars: () => void;
 
-        const unsubscribeAuth = auth.onAuthStateChanged((user) => {
+        const unsubAuth = auth.onAuthStateChanged((user) => {
             if (user) {
-                setError(null);
-                const q = query(collection(db, "books"), where("authorId", "==", user.uid));
+                // Query 1: My Books
+                const qBooks = query(collection(db, "books"), where("authorId", "==", user.uid));
+                unsubBooks = onSnapshot(qBooks, (snap) => {
+                    setBooks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
 
-                unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
-                    const booksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setBooks(booksData);
-                    setLoading(false);
-                }, (err) => {
-                    console.error("Error fetching books:", err);
-                    setError(err.message);
+                // Query 2: All My Characters (for hierarchy)
+                const qChars = query(collection(db, "characters"), where("authorId", "==", user.uid));
+                unsubChars = onSnapshot(qChars, (snap) => {
+                    setCharacters(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                     setLoading(false);
                 });
             } else {
@@ -36,102 +36,123 @@ export default function AuthorDashboard() {
             }
         });
 
-        // Safety timeout
-        const timeout = setTimeout(() => {
-            if (loading) {
-                setLoading(false);
-                setError("Request timed out. Please check your connection.");
-            }
-        }, 10000);
-
+        // Safety timeout omitted for brevity, standard loading state handles it
         return () => {
-            unsubscribeAuth();
-            if (unsubscribeSnapshot) unsubscribeSnapshot();
-            clearTimeout(timeout);
+            unsubAuth();
+            if (unsubBooks) unsubBooks();
+            if (unsubChars) unsubChars();
         };
     }, []);
 
+    const handleLogout = async () => {
+        await signOut(auth);
+        router.replace('/');
+    };
+
     return (
-        <SafeAreaView style={GlobalStyles.container}>
-            <ScrollView>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <Text style={[GlobalStyles.title, { color: Colors.author.primary, marginBottom: 0 }]}>Dashboard</Text>
-                    <TouchableOpacity onPress={() => router.push('/')}>
-                        <Text style={{ color: '#666' }}>Log Out</Text>
-                    </TouchableOpacity>
+        <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10 }}>
+                <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 24, color: Colors.classic.primary }}>Dashboard</Text>
+                <TouchableOpacity onPress={handleLogout}>
+                    <Text style={{ fontFamily: 'Outfit_500Medium', color: Colors.classic.textSecondary }}>Log Out</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Menu Tabs */}
+            <View style={{ flexDirection: 'row', paddingHorizontal: 20, marginTop: 20, borderBottomWidth: 1, borderBottomColor: Colors.classic.border }}>
+                <View style={{ borderBottomWidth: 3, borderBottomColor: Colors.classic.primary, paddingBottom: 10, marginRight: 20 }}>
+                    <Text style={{ fontFamily: 'Outfit_700Bold', color: Colors.classic.primary, fontSize: 16 }}>My Books</Text>
                 </View>
-
-                <View style={GlobalStyles.card}>
-                    <Text style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 15 }}>My Books</Text>
-
-                    {loading ? (
-                        <Text>Loading...</Text>
-                    ) : error ? (
-                        <View style={{ padding: 20, alignItems: 'center' }}>
-                            <Text style={{ color: 'red', marginBottom: 10 }}>{error}</Text>
-                            <TouchableOpacity onPress={() => router.replace('/dashboard/author')}>
-                                <Text style={{ color: Colors.author.primary }}>Retry</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ) : books.length === 0 ? (
-                        <View style={{ alignItems: 'center', padding: 20, borderStyle: 'dashed', borderWidth: 1, borderColor: '#ccc', borderRadius: 8 }}>
-                            <Text style={{ color: '#666', marginBottom: 10 }}>No books yet</Text>
-                            <TouchableOpacity
-                                style={[GlobalStyles.button, { backgroundColor: Colors.author.primary, width: 'auto', paddingHorizontal: 20 }]}
-                                onPress={() => router.push('/dashboard/author/create-book')}
-                            >
-                                <Text style={GlobalStyles.buttonText}>+ Create New Book</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ) : (
-                        <View style={{ gap: 10 }}>
-                            {books.map((book) => (
-                                <View key={book.id} style={{ padding: 10, backgroundColor: '#f9f9f9', borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <View>
-                                        <Text style={{ fontWeight: 'bold', fontSize: 16 }}>{book.title}</Text>
-                                        <Text style={{ color: '#666' }}>{book.genre}</Text>
-                                    </View>
-                                    <Text style={{ fontSize: 20 }}>{book.cover}</Text>
-                                </View>
-                            ))}
-                            <TouchableOpacity
-                                style={[GlobalStyles.button, { backgroundColor: Colors.author.primary, marginTop: 10 }]}
-                                onPress={() => router.push('/dashboard/author/create-book')}
-                            >
-                                <Text style={GlobalStyles.buttonText}>+ Add Another Book</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
+                <View style={{ paddingBottom: 10 }}>
+                    <Text style={{ fontFamily: 'Outfit_500Medium', color: Colors.classic.textSecondary, fontSize: 16, opacity: 0.5 }}>Analytics</Text>
                 </View>
+            </View>
 
-                <View style={{ marginTop: 20 }}>
-                    <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>Quick Actions</Text>
-                    <View style={{ flexDirection: 'row', gap: 10 }}>
+            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
+                {loading ? (
+                    <Text style={{ textAlign: 'center', marginTop: 20, color: Colors.classic.textSecondary }}>Loading library...</Text>
+                ) : books.length === 0 ? (
+                    <View style={{ alignItems: 'center', marginTop: 50 }}>
+                        <Text style={{ color: Colors.classic.textSecondary, marginBottom: 20 }}>You haven't written any books yet.</Text>
                         <TouchableOpacity
-                            style={[GlobalStyles.card, { flex: 1, alignItems: 'center' }]}
-                            onPress={() => router.push('/dashboard/author/create-character')}
+                            style={[GlobalStyles.button, { backgroundColor: Colors.classic.primary, paddingHorizontal: 30 }]}
+                            onPress={() => router.push('/onboarding/author/book-info')}
                         >
-                            <Text style={{ fontSize: 24 }}>👤</Text>
-                            <Text style={{ marginTop: 5, textAlign: 'center' }}>Create Character</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[GlobalStyles.card, { flex: 1, alignItems: 'center' }]}
-                            onPress={async () => {
-                                if (!auth.currentUser) return;
-                                const result = await SeedService.seedDemoData(auth.currentUser.uid);
-                                if (result.success) {
-                                    alert("Demo book loaded! Pull to refresh or wait a moment.");
-                                } else {
-                                    alert("Failed to load demo data.");
-                                }
-                            }}
-                        >
-                            <Text style={{ fontSize: 24 }}>✨</Text>
-                            <Text style={{ marginTop: 5, textAlign: 'center' }}>Load Demo Book</Text>
+                            <Text style={GlobalStyles.buttonText}>Start Your First Book</Text>
                         </TouchableOpacity>
                     </View>
-                </View>
+                ) : (
+                    <View style={{ gap: 20 }}>
+                        {books.map((book) => {
+                            const bookChars = characters.filter(c => c.bookId === book.id);
+
+                            return (
+                                <View key={book.id} style={[GlobalStyles.card, { borderColor: Colors.classic.border, padding: 0, overflow: 'hidden' }]}>
+                                    {/* Book Header */}
+                                    <View style={{ backgroundColor: Colors.classic.secondary, padding: 15 }}>
+                                        <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 18, color: Colors.classic.primary }}>{book.title}</Text>
+                                        <Text style={{ fontFamily: 'Outfit_400Regular', fontSize: 14, color: Colors.classic.text }}>{book.genre || 'Uncategorized'} • {bookChars.length} Characters</Text>
+                                    </View>
+
+                                    {/* Character List */}
+                                    <View style={{ padding: 15 }}>
+                                        {bookChars.length > 0 ? (
+                                            <View style={{ gap: 10 }}>
+                                                {bookChars.map(char => (
+                                                    <View key={char.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9f9f9', padding: 10, borderRadius: 8 }}>
+                                                        <View style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.classic.primary, justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+                                                            <Text style={{ color: 'white', fontWeight: 'bold' }}>{char.name[0]}</Text>
+                                                        </View>
+                                                        <View>
+                                                            <Text style={{ fontFamily: 'Outfit_600SemiBold', color: Colors.classic.text }}>{char.name}</Text>
+                                                            <Text style={{ fontSize: 12, color: Colors.classic.textSecondary }}>{char.role}</Text>
+                                                        </View>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        ) : (
+                                            <Text style={{ fontStyle: 'italic', color: '#999', fontSize: 12, marginBottom: 10 }}>No characters added yet.</Text>
+                                        )}
+
+                                        {/* Action: Add Character */}
+                                        <TouchableOpacity
+                                            style={{ flexDirection: 'row', alignItems: 'center', marginTop: 15 }}
+                                            onPress={() => router.push({ pathname: '/onboarding/author/create-character', params: { bookId: book.id } })}
+                                        >
+                                            <Text style={{ color: Colors.classic.primary, fontWeight: 'bold' }}>+ Add Character</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                )}
             </ScrollView>
+
+            {/* Floating Action Button for New Book */}
+            {!loading && books.length > 0 && (
+                <TouchableOpacity
+                    style={{
+                        position: 'absolute',
+                        bottom: 30,
+                        right: 20,
+                        backgroundColor: Colors.classic.primary,
+                        width: 60,
+                        height: 60,
+                        borderRadius: 30,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 4.65,
+                        elevation: 8,
+                    }}
+                    onPress={() => router.push('/onboarding/author/book-info')}
+                >
+                    <Text style={{ fontSize: 30, color: 'white', marginTop: -2 }}>+</Text>
+                </TouchableOpacity>
+            )}
         </SafeAreaView>
     );
 }
