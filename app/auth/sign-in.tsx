@@ -61,6 +61,9 @@ export default function SignIn() {
         addLog(`API Key Configured: ${firebaseConfig.apiKey ? "YES (" + firebaseConfig.apiKey.substring(0, 4) + "...)" : "NO"}`);
         try {
             const provider = new GoogleAuthProvider();
+            // Critical fix: Force Google to show account picker every time
+            provider.setCustomParameters({ prompt: 'select_account' });
+
             addLog("Opening popup...");
             const result = await signInWithPopup(auth, provider);
             addLog(`Popup closed. User: ${result.user.uid}`);
