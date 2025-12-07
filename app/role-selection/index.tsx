@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { signOut } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
@@ -61,9 +62,22 @@ export default function RoleSelectionScreen() {
         }
     };
 
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            router.replace('/');
+        } catch (error) {
+            console.error("Error signing out:", error);
+            Alert.alert("Error", "Failed to sign out.");
+        }
+    };
+
     return (
         <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
             <View style={styles.header}>
+                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                    <Text style={styles.logoutText}>Log Out</Text>
+                </TouchableOpacity>
                 <Text style={styles.title}>How will you use Arlea?</Text>
                 <Text style={styles.subtitle}>Choose your primary experience. You can switch later.</Text>
             </View>
@@ -73,18 +87,20 @@ export default function RoleSelectionScreen() {
                     title="I am an Author"
                     subtitle="Create worlds, characters, and stories."
                     backgroundColor={Colors.classic.surface}
-                    textColor={Colors.classic.text}
+                    textColor={Colors.classic.primary} // Wine Berry
                     onPress={() => handleRoleSelect('author')}
                     disabled={loading}
+                    style={{ borderColor: Colors.classic.secondary }} // Azalea
                 />
 
                 <ActionCard
                     title="I am a Reader"
                     subtitle="Chat with characters and explore stories."
                     backgroundColor={Colors.classic.surface}
-                    textColor={Colors.classic.text}
+                    textColor={Colors.classic.textSecondary} // Use generic text for secondary option, or primary if both equal
                     onPress={() => handleRoleSelect('reader')}
                     disabled={loading}
+                    style={{ borderColor: Colors.classic.border }}
                 />
             </View>
 
@@ -107,9 +123,20 @@ export default function RoleSelectionScreen() {
 
 const styles = StyleSheet.create({
     header: {
-        marginTop: 40,
-        marginBottom: 40,
+        marginTop: 20,
+        marginBottom: 30,
         alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    logoutButton: {
+        alignSelf: 'flex-end',
+        padding: 8,
+        marginBottom: 10,
+    },
+    logoutText: {
+        fontFamily: 'Outfit_500Medium',
+        color: Colors.classic.textSecondary,
+        fontSize: 14,
     },
     title: {
         fontFamily: 'Outfit_700Bold',
