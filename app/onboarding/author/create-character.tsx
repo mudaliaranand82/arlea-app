@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { signOut } from 'firebase/auth';
 import { addDoc, collection } from 'firebase/firestore';
 import { useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -6,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
 import { useAuth } from '../../../context/AuthContext';
-import { db } from '../../../firebaseConfig';
+import { auth, db } from '../../../firebaseConfig';
 
 export default function CreateCharacter() {
     const { user } = useAuth();
@@ -25,13 +26,15 @@ export default function CreateCharacter() {
         }
 
         setLoading(true);
+        console.log("Saving character...", { finish });
+
         try {
             if (!user) {
                 Alert.alert("Error", "You must be logged in.");
                 return;
             }
 
-            await addDoc(collection(db, "characters"), {
+            const docReference = await addDoc(collection(db, "characters"), {
                 bookId,
                 authorId: user.uid,
                 name,
@@ -41,10 +44,13 @@ export default function CreateCharacter() {
                 speakingStyle,
                 createdAt: new Date()
             });
+            console.log("Character saved with ID:", docReference.id);
 
             if (finish) {
+                console.log("Finishing... Redirecting to Dashboard");
                 router.replace('/dashboard/author');
             } else {
+                console.log("Adding another...");
                 // Reset form for next character
                 setName('');
                 setRole('Protagonist');
@@ -61,8 +67,22 @@ export default function CreateCharacter() {
         }
     };
 
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            router.replace('/');
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     return (
         <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20 }}>
+                <TouchableOpacity onPress={handleLogout}>
+                    <Text style={{ fontFamily: 'Outfit_500Medium', color: Colors.classic.textSecondary }}>Log Out</Text>
+                </TouchableOpacity>
+            </View>
             <ScrollView contentContainerStyle={{ padding: 20 }}>
                 <Text style={[GlobalStyles.title, { color: Colors.classic.primary }]}>Add Character</Text>
                 <Text style={[GlobalStyles.subtitle, { color: Colors.classic.textSecondary }]}>

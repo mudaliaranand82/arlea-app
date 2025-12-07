@@ -4,9 +4,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
 
+import { signOut } from 'firebase/auth';
+import { auth } from '../../../firebaseConfig';
+
 export default function AuthorWelcome() {
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            router.replace('/');
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     return (
         <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20 }}>
+                <TouchableOpacity onPress={handleLogout}>
+                    <Text style={{ fontFamily: 'Outfit_500Medium', color: Colors.classic.textSecondary }}>Log Out</Text>
+                </TouchableOpacity>
+            </View>
             <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }}>
                 <Text style={[GlobalStyles.title, { color: Colors.classic.primary }]}>Welcome, Author!</Text>
                 <Text style={[GlobalStyles.subtitle, { color: Colors.classic.textSecondary }]}>

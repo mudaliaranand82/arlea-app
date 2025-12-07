@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { signOut } from 'firebase/auth';
 import { addDoc, collection } from 'firebase/firestore';
 import { useState } from 'react';
 import { Alert, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -6,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
 import { useAuth } from '../../../context/AuthContext';
-import { db } from '../../../firebaseConfig';
+import { auth, db } from '../../../firebaseConfig';
 
 const GENRES = ["Fantasy", "Sci-Fi", "Mystery", "Romance", "Thriller", "Horror", "Historical Fiction", "Non-Fiction", "Other"];
 
@@ -47,8 +48,22 @@ export default function BookInfo() {
         }
     };
 
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            router.replace('/');
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
     return (
         <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20 }}>
+                <TouchableOpacity onPress={handleLogout}>
+                    <Text style={{ fontFamily: 'Outfit_500Medium', color: Colors.classic.textSecondary }}>Log Out</Text>
+                </TouchableOpacity>
+            </View>
             <ScrollView contentContainerStyle={{ padding: 20 }}>
                 <Text style={[GlobalStyles.title, { color: Colors.classic.primary }]}>Tell us about your book</Text>
                 <Text style={[GlobalStyles.subtitle, { color: Colors.classic.textSecondary }]}>This information helps us set up your world.</Text>
