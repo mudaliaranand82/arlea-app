@@ -1,10 +1,12 @@
 import { router } from 'expo-router';
+import { signOut } from 'firebase/auth';
 import React, { useRef, useState } from 'react';
 import { Dimensions, FlatList, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { useSharedValue } from 'react-native-reanimated';
 import { Colors } from '../constants/Colors';
 import { GlobalStyles } from '../constants/Theme';
 import { useAuth } from '../context/AuthContext';
+import { auth } from '../firebaseConfig';
 
 const { width } = Dimensions.get('window');
 
