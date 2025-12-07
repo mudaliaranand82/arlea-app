@@ -6,7 +6,7 @@ import { Colors } from '../../constants/Colors';
 import { GlobalStyles } from '../../constants/Theme';
 
 import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
 import { Alert } from 'react-native';
 import { auth, db, firebaseConfig } from '../../firebaseConfig';
 
@@ -102,8 +102,17 @@ export default function SignIn() {
                 addLog(`User Role: ${userData?.role}`);
 
                 if (userData.role === 'author') {
-                    addLog("Redirecting to Author...");
-                    router.replace('/dashboard/author');
+                    addLog("Checking for existing books...");
+                    const booksQ = query(collection(db, "books"), where("authorId", "==", user.uid), limit(1));
+                    const booksSnap = await getDocs(booksQ);
+
+                    if (!booksSnap.empty) {
+                        addLog("Has books. Redirecting to Dashboard...");
+                        router.replace('/dashboard/author');
+                    } else {
+                        addLog("No books. Redirecting to Onboarding...");
+                        router.replace('/onboarding/author/welcome');
+                    }
                 } else if (userData.role === 'reader') {
                     addLog("Redirecting to Reader...");
                     router.replace('/dashboard/reader');

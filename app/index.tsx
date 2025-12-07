@@ -50,13 +50,21 @@ export default function WelcomeScreen() {
 
     const checkUserRole = async (uid: string) => {
         try {
-            const { getDoc, doc } = await import('firebase/firestore');
+            const { getDoc, doc, collection, query, where, getDocs, limit } = await import('firebase/firestore');
             const { db } = await import('../firebaseConfig');
 
             const userDoc = await getDoc(doc(db, "users", uid));
             if (userDoc.exists()) {
                 const data = userDoc.data();
-                if (data.role === 'author') router.replace('/dashboard/author');
+                if (data.role === 'author') {
+                    const booksQ = query(collection(db, "books"), where("authorId", "==", uid), limit(1));
+                    const booksSnap = await getDocs(booksQ);
+                    if (!booksSnap.empty) {
+                        router.replace('/dashboard/author');
+                    } else {
+                        router.replace('/onboarding/author/welcome');
+                    }
+                }
                 else if (data.role === 'reader') router.replace('/dashboard/reader');
                 else router.replace('/role-selection');
             } else {
