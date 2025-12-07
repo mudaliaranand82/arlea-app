@@ -8,7 +8,6 @@ interface ActionCardProps {
     onPress: () => void;
     title: string;
     subtitle: string;
-    subtitle: string;
     style?: StyleProp<ViewStyle>;
     disabled?: boolean;
 }
