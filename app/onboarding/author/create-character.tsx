@@ -47,7 +47,11 @@ export default function CreateCharacter() {
             console.log("Character saved with ID:", docReference.id);
 
             if (finish) {
-                console.log("Finishing... Redirecting to Dashboard");
+                console.log("Finishing... Clearing stack and redirecting to Dashboard");
+                // Attempt to clear stack so user can't go back to onboarding
+                if (router.canGoBack()) {
+                    router.dismissAll();
+                }
                 router.replace('/dashboard/author');
             } else {
                 console.log("Adding another...");

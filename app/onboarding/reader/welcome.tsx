@@ -23,7 +23,7 @@ export default function ReaderWelcome() {
                     style={[GlobalStyles.button, { backgroundColor: Colors.classic.primary, marginTop: 30 }]}
                     onPress={() => router.push('/onboarding/reader/book-selection')}
                 >
-                    <Text style={GlobalStyles.buttonText}>Start Exploring</Text>
+                    <Text style={GlobalStyles.buttonText}>Enter World</Text>
                 </TouchableOpacity>
             </ScrollView>
         </SafeAreaView>
