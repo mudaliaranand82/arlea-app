@@ -8,14 +8,17 @@ interface ActionCardProps {
     onPress: () => void;
     title: string;
     subtitle: string;
+    subtitle: string;
     style?: StyleProp<ViewStyle>;
+    disabled?: boolean;
 }
 
-export function ActionCard({ backgroundColor, textColor, onPress, title, subtitle, style }: ActionCardProps) {
+export function ActionCard({ backgroundColor, textColor, onPress, title, subtitle, style, disabled }: ActionCardProps) {
     return (
         <TouchableOpacity
             activeOpacity={0.9}
             onPress={onPress}
+            disabled={disabled}
             style={[
                 styles.container,
                 { backgroundColor },
