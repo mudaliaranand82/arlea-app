@@ -2,13 +2,13 @@ import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionCard } from '../../components/ui/ActionCard';
 import { Colors } from '../../constants/Colors';
 import { GlobalStyles } from '../../constants/Theme';
 import { useAuth } from '../../context/AuthContext';
-import { db } from '../../firebaseConfig';
+import { auth, db } from '../../firebaseConfig';
 
 export default function RoleSelectionScreen() {
     const { user } = useAuth();
