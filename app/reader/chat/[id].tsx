@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
-import { db } from '../../../firebaseConfig';
+import { auth, db } from '../../../firebaseConfig';
 import { generateCharacterResponse } from '../../../services/ai';
 
 type Message = {
@@ -90,14 +91,25 @@ export default function ChatScreen() {
     return (
         <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
             {/* Header */}
-            <View style={{ padding: 15, borderBottomWidth: 1, borderColor: '#eee', flexDirection: 'row', alignItems: 'center' }}>
-                <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 15 }}>
-                    <Ionicons name="arrow-back" size={24} color={Colors.classic.text} />
-                </TouchableOpacity>
-                <View>
-                    <Text style={{ fontFamily: 'Outfit_600SemiBold', fontSize: 18, color: Colors.classic.text }}>{character.name}</Text>
-                    <Text style={{ fontSize: 12, color: Colors.classic.textSecondary }}>{character.role}</Text>
+            <View style={{ padding: 15, borderBottomWidth: 1, borderColor: '#eee', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 15 }}>
+                        <Ionicons name="arrow-back" size={24} color={Colors.classic.text} />
+                    </TouchableOpacity>
+                    <View>
+                        <Text style={{ fontFamily: 'Outfit_600SemiBold', fontSize: 18, color: Colors.classic.text }}>{character.name}</Text>
+                        <Text style={{ fontSize: 12, color: Colors.classic.textSecondary }}>{character.role}</Text>
+                    </View>
                 </View>
+                <TouchableOpacity
+                    onPress={async () => {
+                        await signOut(auth);
+                        router.replace('/');
+                    }}
+                    style={{ padding: 5 }}
+                >
+                    <Ionicons name="log-out-outline" size={24} color={Colors.classic.textSecondary} />
+                </TouchableOpacity>
             </View>
 
             {/* Chat List */}

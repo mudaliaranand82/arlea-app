@@ -1,16 +1,27 @@
 import { router } from 'expo-router';
+import { signOut } from 'firebase/auth';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
 import { useAuth } from '../../../context/AuthContext';
-import { db } from '../../../firebaseConfig';
+import { auth, db } from '../../../firebaseConfig';
 
 export default function ReaderDashboard() {
     const { user, loading } = useAuth();
+    const [recentBooks, setRecentBooks] = useState<any[]>([]);
     const [books, setBooks] = useState<any[]>([]);
     const [characters, setCharacters] = useState<any[]>([]);
+
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            router.replace('/');
+        } catch (error) {
+            console.error("Logout Error:", error);
+        }
+    };
 
     useEffect(() => {
         if (!user) return;
@@ -42,11 +53,24 @@ export default function ReaderDashboard() {
 
     return (
         <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
-            <View style={{ padding: 20 }}>
-                <Text style={[GlobalStyles.title, { color: Colors.classic.primary }]}>Explore Worlds</Text>
-                <Text style={[GlobalStyles.subtitle, { color: Colors.classic.textSecondary }]}>
-                    Choose a character to start your journey.
-                </Text>
+            <View style={{ padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View>
+                    <Text style={[GlobalStyles.title, { color: Colors.classic.primary }]}>Explore Worlds</Text>
+                    <Text style={[GlobalStyles.subtitle, { color: Colors.classic.textSecondary }]}>
+                        Choose a character to start your journey.
+                    </Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 15 }}>
+                    {/* <TouchableOpacity onPress={() => router.push('/dashboard/reader/library')}>
+                        <Text style={{ color: Colors.reader.primary }}>See All</Text>
+                    </TouchableOpacity> */}
+                    <TouchableOpacity
+                        onPress={handleLogout}
+                        style={{ backgroundColor: '#fee2e2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}
+                    >
+                        <Text style={{ color: '#dc2626', fontSize: 12, fontWeight: '600' }}>Log Out</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <FlatList
