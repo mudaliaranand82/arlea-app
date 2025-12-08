@@ -3,10 +3,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Colors } from '../../constants/Colors';
-import { GlobalStyles } from '../../constants/Theme';
-import { db } from '../../firebaseConfig';
-import { generateCharacterResponse } from '../../services/ai';
+import { Colors } from '../../../constants/Colors';
+import { GlobalStyles } from '../../../constants/Theme';
+import { db } from '../../../firebaseConfig';
+import { generateCharacterResponse } from '../../../services/ai';
 
 type Message = {
     id: string;
@@ -62,7 +62,7 @@ export default function ChatScreen() {
         try {
             // Convert app history to Gemini history format
             const history = messages.filter(m => m.id !== 'init').map(m => ({
-                role: m.sender === 'user' ? 'user' : 'model' as const,
+                role: (m.sender === 'user' ? 'user' : 'model') as "user" | "model",
                 parts: [{ text: m.text }]
             }));
 
