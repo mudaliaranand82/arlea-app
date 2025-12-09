@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
-import { signOut } from 'firebase/auth';
-import { collection, deleteDoc, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { deleteUser, signOut } from 'firebase/auth';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
@@ -49,16 +49,59 @@ export default function AuthorDashboard() {
         router.replace('/');
     };
 
-    const handleResetProfile = async () => {
+    const handleResetProfile = () => {
+        if (!auth.currentUser) return;
+
+        // Use standard window.confirm for Web if available (Expo Web), otherwise Alert for Native
+        if (typeof window !== 'undefined' && window.confirm) {
+            const confirmed = window.confirm("Are you sure you want to delete your account? This action cannot be undone and will delete all your books and characters.");
+            if (!confirmed) return;
+            executeDelete();
+            return;
+        }
+
+        Alert.alert(
+            "Delete Account",
+            "Are you sure you want to delete your account? This action cannot be undone and will delete all your books and characters.",
+            [
+                { text: "Cancel", style: "cancel" },
+                { text: "Delete", style: "destructive", onPress: executeDelete }
+            ]
+        );
+    };
+
+    const executeDelete = async () => {
         if (!auth.currentUser) return;
         try {
-            await deleteDoc(doc(db, "users", auth.currentUser.uid));
-            await signOut(auth);
+            const uid = auth.currentUser.uid;
+
+            // 1. Delete Author's Books
+            const booksQ = query(collection(db, "books"), where("authorId", "==", uid));
+            const booksSnap = await getDocs(booksQ);
+            const deleteBookPromises = booksSnap.docs.map(doc => deleteDoc(doc.ref));
+            await Promise.all(deleteBookPromises);
+
+            // 2. Delete Author's Characters
+            const charsQ = query(collection(db, "characters"), where("authorId", "==", uid));
+            const charsSnap = await getDocs(charsQ);
+            const deleteCharPromises = charsSnap.docs.map(doc => deleteDoc(doc.ref));
+            await Promise.all(deleteCharPromises);
+
+            // 3. Delete User Document
+            await deleteDoc(doc(db, "users", uid));
+
+            // 4. Delete Auth Account
+            await deleteUser(auth.currentUser);
+
             router.replace('/');
-            alert("Profile Reset. You are now a new user.");
-        } catch (e) {
-            console.error(e);
-            alert("Failed to reset profile.");
+            alert("Account and data deleted successfully.");
+        } catch (e: any) {
+            console.error("Delete Account Error:", e);
+            if (e.code === 'auth/requires-recent-login') {
+                alert("Please log out and log back in before deleting your account for security reasons.");
+            } else {
+                alert("Failed to delete account. Please try again.");
+            }
         }
     };
 

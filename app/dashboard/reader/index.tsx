@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
-import { signOut } from 'firebase/auth';
+import { deleteUser, signOut } from 'firebase/auth';
 import { collection, deleteDoc, doc, onSnapshot, query } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import { FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
 import { useAuth } from '../../../context/AuthContext';
@@ -23,16 +23,41 @@ export default function ReaderDashboard() {
         }
     };
 
-    const handleResetProfile = async () => {
+    const handleResetProfile = () => {
+        if (!auth.currentUser) return;
+
+        // Use standard window.confirm for Web if available (Expo Web), otherwise Alert for Native
+        if (typeof window !== 'undefined' && window.confirm) {
+            const confirmed = window.confirm("Are you sure you want to delete your account? This action cannot be undone.");
+            if (!confirmed) return;
+            executeDelete();
+            return;
+        }
+
+        Alert.alert(
+            "Delete Account",
+            "Are you sure you want to delete your account? This action cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                { text: "Delete", style: "destructive", onPress: executeDelete }
+            ]
+        );
+    };
+
+    const executeDelete = async () => {
         if (!auth.currentUser) return;
         try {
             await deleteDoc(doc(db, "users", auth.currentUser.uid));
-            await signOut(auth);
+            await deleteUser(auth.currentUser);
             router.replace('/');
-            alert("Profile Reset. You are now a new user.");
-        } catch (e) {
-            console.error(e);
-            alert("Failed to reset profile.");
+            alert("Account deleted successfully.");
+        } catch (e: any) {
+            console.error("Delete Account Error:", e);
+            if (e.code === 'auth/requires-recent-login') {
+                alert("Please log out and log back in before deleting your account for security reasons.");
+            } else {
+                alert("Failed to delete account. Please try again.");
+            }
         }
     };
 
