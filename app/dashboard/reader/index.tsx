@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import { Colors } from '../../../constants/Colors';
@@ -20,6 +20,19 @@ export default function ReaderDashboard() {
             router.replace('/');
         } catch (error) {
             console.error("Logout Error:", error);
+        }
+    };
+
+    const handleResetProfile = async () => {
+        if (!auth.currentUser) return;
+        try {
+            await deleteDoc(doc(db, "users", auth.currentUser.uid));
+            await signOut(auth);
+            router.replace('/');
+            alert("Profile Reset. You are now a new user.");
+        } catch (e) {
+            console.error(e);
+            alert("Failed to reset profile.");
         }
     };
 
@@ -65,10 +78,16 @@ export default function ReaderDashboard() {
                         <Text style={{ color: Colors.reader.primary }}>See All</Text>
                     </TouchableOpacity> */}
                     <TouchableOpacity
-                        onPress={handleLogout}
-                        style={{ backgroundColor: '#fee2e2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}
+                        onPress={handleResetProfile}
+                        style={{ backgroundColor: '#fee2e2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginRight: 5, borderWidth: 1, borderColor: '#ef4444' }}
                     >
-                        <Text style={{ color: '#dc2626', fontSize: 12, fontWeight: '600' }}>Log Out</Text>
+                        <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>Reset Profile</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={handleLogout}
+                        style={{ backgroundColor: '#f3f4f6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}
+                    >
+                        <Text style={{ color: '#374151', fontSize: 12, fontWeight: '600' }}>Log Out</Text>
                     </TouchableOpacity>
                 </View>
             </View>

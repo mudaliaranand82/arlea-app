@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -49,13 +49,31 @@ export default function AuthorDashboard() {
         router.replace('/');
     };
 
+    const handleResetProfile = async () => {
+        if (!auth.currentUser) return;
+        try {
+            await deleteDoc(doc(db, "users", auth.currentUser.uid));
+            await signOut(auth);
+            router.replace('/');
+            alert("Profile Reset. You are now a new user.");
+        } catch (e) {
+            console.error(e);
+            alert("Failed to reset profile.");
+        }
+    };
+
     return (
         <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 10 }}>
                 <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 24, color: Colors.classic.primary }}>Dashboard</Text>
-                <TouchableOpacity onPress={handleLogout}>
-                    <Text style={{ fontFamily: 'Outfit_500Medium', color: Colors.classic.textSecondary }}>Log Out</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 15 }}>
+                    <TouchableOpacity onPress={handleResetProfile}>
+                        <Text style={{ fontFamily: 'Outfit_500Medium', color: '#ef4444', fontSize: 12 }}>Reset Profile</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleLogout}>
+                        <Text style={{ fontFamily: 'Outfit_500Medium', color: Colors.classic.textSecondary }}>Log Out</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* Menu Tabs */}
