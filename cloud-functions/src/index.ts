@@ -1,27 +1,31 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as admin from "firebase-admin";
-import * as functions from "firebase-functions";
+import { defineString } from "firebase-functions/params";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 
 admin.initializeApp();
 const db = admin.firestore();
 
+// Define API Key as a param (best practice for Gen 2) or env var
+const geminiApiKey = defineString("GEMINI_API_KEY");
+
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
 
-export const chatWithGemini = functions.https.onCall(async (data: any, context: any) => {
+export const chatWithGemini = onCall({ cors: true }, async (request) => {
     // 1. Check Authentication
-    if (!context.auth) {
-        throw new functions.https.HttpsError(
+    if (!request.auth) {
+        throw new HttpsError(
             'unauthenticated',
             'The function must be called while authenticated.'
         );
     }
 
-    const { message, bookId, characterId, conversationHistory } = data;
+    const { message, bookId, characterId, conversationHistory } = request.data;
 
     // 2. Validate Data
     if (!message || !bookId || !characterId) {
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             'invalid-argument',
             'The function must be called with a message, bookId, and characterId.'
         );
@@ -29,9 +33,11 @@ export const chatWithGemini = functions.https.onCall(async (data: any, context: 
 
     try {
         // 3. Setup Gemini
-        const apiKey = process.env.GEMINI_API_KEY;
+        // Use value() to access params
+        const apiKey = geminiApiKey.value() || process.env.GEMINI_API_KEY;
+
         if (!apiKey) {
-            throw new functions.https.HttpsError('failed-precondition', 'Gemini API Key is not configured.');
+            throw new HttpsError('failed-precondition', 'Gemini API Key is not configured.');
         }
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -40,11 +46,11 @@ export const chatWithGemini = functions.https.onCall(async (data: any, context: 
         const [bookDoc, charDoc, userProgressDoc] = await Promise.all([
             db.collection('books').doc(bookId).get(),
             db.collection('characters').doc(characterId).get(),
-            db.collection('user_progress').doc(`${context.auth.uid}_${bookId}`).get() // Assuming a composite key or similar structure
+            db.collection('user_progress').doc(`${request.auth.uid}_${bookId}`).get() // Assuming a composite key or similar structure
         ]);
 
         if (!bookDoc.exists || !charDoc.exists) {
-            throw new functions.https.HttpsError('not-found', 'Book or Character not found.');
+            throw new HttpsError('not-found', 'Book or Character not found.');
         }
 
         const bookData = bookDoc.data();
@@ -94,6 +100,6 @@ export const chatWithGemini = functions.https.onCall(async (data: any, context: 
 
     } catch (error: any) {
         console.error("Gemini Error:", error);
-        throw new functions.https.HttpsError('internal', 'Failed to generate response.', error.message);
+        throw new HttpsError('internal', 'Failed to generate response.', error.message);
     }
 });

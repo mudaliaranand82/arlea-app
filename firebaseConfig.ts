@@ -1,7 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-// import { getAnalytics } from "firebase/analytics";
 
 // TODO: Replace the following with your app's Firebase project configuration
 // IMPORTANT: For Expo projects using the JS SDK, use the "Web" app configuration from Firebase.
@@ -31,8 +30,13 @@ const db = initializeFirestore(app, {
 });
 
 // Initialize Functions
-import { getFunctions } from "firebase/functions";
+import { connectFunctionsEmulator, getFunctions } from "firebase/functions";
 const functions = getFunctions(app);
+
+// Connect to emulator in development
+if (__DEV__) {
+    connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+}
 
 export { app, auth, db, firebaseConfig, functions };
 
