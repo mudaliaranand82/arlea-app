@@ -30,4 +30,9 @@ const db = initializeFirestore(app, {
     experimentalForceLongPolling: true,
 });
 
-export { app, auth, db, firebaseConfig };
+// Initialize Functions
+import { getFunctions } from "firebase/functions";
+const functions = getFunctions(app);
+
+export { app, auth, db, firebaseConfig, functions };
+

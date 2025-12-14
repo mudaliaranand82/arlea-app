@@ -7,7 +7,7 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, SafeAreaVi
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
 import { auth, db } from '../../../firebaseConfig';
-import { generateCharacterResponse } from '../../../services/ai';
+import { ChatService } from '../../../services/ChatService';
 
 type Message = {
     id: string;
@@ -64,21 +64,20 @@ export default function ChatScreen() {
             // Convert app history to Gemini history format
             const history = messages.filter(m => m.id !== 'init').map(m => ({
                 role: (m.sender === 'user' ? 'user' : 'model') as "user" | "model",
-                parts: [{ text: m.text }]
+                parts: m.text
             }));
 
-            const responseText = await generateCharacterResponse(
-                character.name,
-                character.personality,
-                character.backstory,
-                character.speakingStyle,
+            const responseText = await ChatService.sendMessage(
                 message,
+                character.bookId,
+                id as string,
                 history
             );
 
             setMessages(prev => [...prev, { id: Date.now().toString(), text: responseText, sender: 'character' as const }]);
         } catch (error) {
             console.error(error);
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: "(Connection Error - Check Logs)", sender: 'character' as const }]);
         } finally {
             setTyping(false);
         }

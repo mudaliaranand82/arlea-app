@@ -1,0 +1,13 @@
+# Compiled TypeScript code
+lib/
+
+# TypeScript definitions for the following dependencies that are not instaled
+# on the host creation environment.
+node_modules/
+.npm/
+
+# Log files
+firebase-debug.log*
+
+# Env files
+.env
