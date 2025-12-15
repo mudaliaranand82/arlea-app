@@ -64,7 +64,7 @@ export default function ChatScreen() {
             // Convert app history to Gemini history format
             const history = messages.filter(m => m.id !== 'init').map(m => ({
                 role: (m.sender === 'user' ? 'user' : 'model') as "user" | "model",
-                parts: m.text
+                parts: [{ text: m.text }]
             }));
 
             const responseText = await ChatService.sendMessage(

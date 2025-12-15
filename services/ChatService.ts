@@ -7,7 +7,7 @@ import { functions } from '../firebaseConfig'; // This checks our config
 
 export interface ChatMessage {
     role: 'user' | 'model';
-    parts: string;
+    parts: { text: string }[];
 }
 
 export const ChatService = {

@@ -1,18 +1,18 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as admin from "firebase-admin";
-import { defineString } from "firebase-functions/params";
+import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 
 admin.initializeApp();
 const db = admin.firestore();
 
-// Define API Key as a param (best practice for Gen 2) or env var
-const geminiApiKey = defineString("GEMINI_API_KEY");
+// Define API Key as a secret (best practice for Gen 2)
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 // Start writing functions
 // https://firebase.google.com/docs/functions/typescript
 
-export const chatWithGemini = onCall({ cors: true }, async (request) => {
+export const chatWithGemini = onCall({ cors: true, secrets: [geminiApiKey] }, async (request) => {
     // 1. Check Authentication
     if (!request.auth) {
         throw new HttpsError(
@@ -33,14 +33,14 @@ export const chatWithGemini = onCall({ cors: true }, async (request) => {
 
     try {
         // 3. Setup Gemini
-        // Use value() to access params
-        const apiKey = geminiApiKey.value() || process.env.GEMINI_API_KEY;
+        // Use value() to access the secret
+        const apiKey = geminiApiKey.value();
 
         if (!apiKey) {
             throw new HttpsError('failed-precondition', 'Gemini API Key is not configured.');
         }
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
         // 4. Fetch Context Data Parallelly
         const [bookDoc, charDoc, userProgressDoc] = await Promise.all([
