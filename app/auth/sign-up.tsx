@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/Colors';
-import { GlobalStyles } from '../../constants/Theme';
+import { AnimatedButton } from '../../components/AnimatedButton';
+import { TopNav } from '../../components/TopNav';
+import { DesignTokens } from '../../constants/DesignSystem';
 
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -15,37 +16,42 @@ export default function SignUp() {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const { width } = useWindowDimensions();
+    const isDesktop = width > 768;
+
+    const showAlert = (title: string, message: string) => {
+        const fullMessage = `${title}: ${message}`;
+        setError(fullMessage);
+        if (typeof window !== 'undefined' && !window.navigator.userAgent.includes('Expo')) {
+            window.alert(fullMessage);
+        } else {
+            Alert.alert(title, message);
+        }
+    };
 
     const handleSignUp = async () => {
+        setError(null);
         if (!email || !password || !confirmPassword) {
-            Alert.alert("Error", "Please fill in all fields.");
+            showAlert("Error", "Please fill in all fields.");
             return;
         }
 
         if (password !== confirmPassword) {
-            Alert.alert("Error", "Passwords do not match.");
+            showAlert("Error", "Passwords do not match.");
             return;
         }
 
         setLoading(true);
-        console.log("Starting sign up process...");
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            console.log("User created:", userCredential.user.uid);
-
-            // Save user profile to Firestore (without role initially)
             await setDoc(doc(db, "users", userCredential.user.uid), {
                 email: email,
                 createdAt: new Date()
             });
-            console.log("User profile saved to Firestore");
-
-            // Navigate to Role Selection
             router.replace('/role-selection');
-
         } catch (error: any) {
-            console.error("Sign Up Error:", error);
-            Alert.alert("Registration Failed", error.message);
+            showAlert("Registration Failed", error.message);
         } finally {
             setLoading(false);
         }
@@ -58,27 +64,22 @@ export default function SignUp() {
             const result = await signInWithPopup(auth, provider);
             await checkUserAndRedirect(result.user);
         } catch (error: any) {
-            console.error("Google Sign Up Error:", error);
-            Alert.alert("Google Sign Up Failed", error.message);
+            showAlert("Google Sign Up Failed", error.message);
         } finally {
             setLoading(false);
         }
     };
 
-
     const checkUserAndRedirect = async (user: any) => {
         const userDoc = await getDoc(doc(db, "users", user.uid));
 
         if (!userDoc.exists()) {
-            // Create user profile
             await setDoc(doc(db, "users", user.uid), {
                 email: user.email,
                 createdAt: new Date()
             });
         }
 
-        // Always redirect to role selection for new/social sign ups that haven't selected a role, 
-        // or dashboard if they already have one.
         if (userDoc.exists()) {
             const userData = userDoc.data();
             if (userData.role === 'author') {
@@ -93,85 +94,252 @@ export default function SignUp() {
         }
     };
 
-
     return (
-        <SafeAreaView style={[GlobalStyles.container, { justifyContent: 'center', backgroundColor: Colors.classic.background }]}>
-            <View style={{ marginBottom: 30 }}>
-                <Text style={[GlobalStyles.title, { color: Colors.classic.primary, textAlign: 'center' }]}>Create Account</Text>
-                <Text style={[GlobalStyles.subtitle, { textAlign: 'center', color: Colors.classic.textSecondary }]}>Join Arlea today</Text>
-            </View>
+        <SafeAreaView style={styles.container}>
+            <TopNav showLogout={false} />
 
-            <View style={GlobalStyles.card}>
-                <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Email</Text>
-                <TextInput
-                    style={GlobalStyles.input}
-                    placeholder="hello@example.com"
-                    placeholderTextColor="#999"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                />
-
-                <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Password</Text>
-                <TextInput
-                    style={GlobalStyles.input}
-                    placeholder="********"
-                    placeholderTextColor="#999"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                />
-
-                <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Confirm Password</Text>
-                <TextInput
-                    style={GlobalStyles.input}
-                    placeholder="********"
-                    placeholderTextColor="#999"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry
-                />
-
-
-
-                <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: Colors.classic.primary, marginTop: 10 }]}
-                    onPress={handleSignUp}
-                    disabled={loading}
-                >
-                    <Text style={GlobalStyles.buttonText}>{loading ? "Creating Account..." : "Sign Up"}</Text>
-                </TouchableOpacity>
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 20 }}>
-                    <View style={{ flex: 1, height: 1, backgroundColor: Colors.classic.border }} />
-                    <Text style={{ marginHorizontal: 10, color: Colors.classic.textSecondary }}>OR</Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: Colors.classic.border }} />
+            <ScrollView
+                contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <Text style={[styles.title, isDesktop && styles.titleDesktop]}>CREATE ACCOUNT</Text>
+                    <Text style={styles.subtitle}>Join Arlea today</Text>
                 </View>
 
-                <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: 'white', borderWidth: 1, borderColor: Colors.classic.border, marginBottom: 10 }]}
-                    onPress={handleGoogleSignIn}
-                    disabled={loading}
+                {/* Error Banner */}
+                {error && (
+                    <View style={styles.errorBanner}>
+                        <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                )}
+
+                {/* Form Card */}
+                <View style={[styles.card, isDesktop && styles.cardDesktop]}>
+                    <Text style={styles.label}>EMAIL</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="hello@example.com"
+                        placeholderTextColor={DesignTokens.colors.textLight}
+                        value={email}
+                        onChangeText={setEmail}
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                    />
+
+                    <Text style={styles.label}>PASSWORD</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="••••••••"
+                        placeholderTextColor={DesignTokens.colors.textLight}
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry
+                    />
+
+                    <Text style={styles.label}>CONFIRM PASSWORD</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="••••••••"
+                        placeholderTextColor={DesignTokens.colors.textLight}
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                        secureTextEntry
+                    />
+
+                    <AnimatedButton
+                        variant="primary"
+                        onPress={handleSignUp}
+                        style={styles.submitButton}
+                    >
+                        <Text style={styles.submitButtonText}>
+                            {loading ? "CREATING ACCOUNT..." : "SIGN UP"}
+                        </Text>
+                        <Text style={styles.submitButtonArrow}>→</Text>
+                    </AnimatedButton>
+
+                    {/* Divider */}
+                    <View style={styles.divider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.dividerText}>OR</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    <AnimatedButton
+                        variant="secondary"
+                        onPress={handleGoogleSignIn}
+                    >
+                        <Text style={styles.googleButtonText}>CONTINUE WITH GOOGLE</Text>
+                    </AnimatedButton>
+                </View>
+
+                {/* Footer */}
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>Already have an account? </Text>
+                    <AnimatedButton variant="outline" onPress={() => router.push('/auth/sign-in')}>
+                        <Text style={styles.footerLink}>SIGN IN</Text>
+                    </AnimatedButton>
+                </View>
+
+                <AnimatedButton
+                    variant="outline"
+                    onPress={() => router.back()}
+                    style={styles.backButton}
                 >
-                    <Text style={[GlobalStyles.buttonText, { color: Colors.classic.text }]}>Continue with Google</Text>
-                </TouchableOpacity>
-
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 20 }}>
-                <Text style={{ color: Colors.classic.textSecondary }}>Already have an account? </Text>
-                <TouchableOpacity onPress={() => router.push('/auth/sign-in')}>
-                    <Text style={{ color: Colors.classic.primary, fontWeight: 'bold' }}>Sign In</Text>
-                </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-                style={{ marginTop: 40, alignSelf: 'center' }}
-                onPress={() => router.back()}
-            >
-                <Text style={{ color: Colors.classic.textSecondary }}>Back to Home</Text>
-            </TouchableOpacity>
+                    <Text style={styles.backButtonText}>← BACK TO HOME</Text>
+                </AnimatedButton>
+            </ScrollView>
         </SafeAreaView>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: DesignTokens.colors.background,
+    },
+    content: {
+        flexGrow: 1,
+        paddingHorizontal: 20,
+        paddingVertical: 30,
+    },
+    contentDesktop: {
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
+    header: {
+        marginBottom: 30,
+        alignItems: 'center',
+    },
+    title: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 32,
+        color: DesignTokens.colors.text,
+        letterSpacing: 2,
+        marginBottom: 8,
+    },
+    titleDesktop: {
+        fontSize: 48,
+    },
+    subtitle: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 16,
+        color: DesignTokens.colors.textLight,
+    },
+    errorBanner: {
+        backgroundColor: '#fee2e2',
+        borderWidth: DesignTokens.borders.regular,
+        borderColor: '#ef4444',
+        padding: 16,
+        marginBottom: 20,
+        width: '100%',
+        maxWidth: 450,
+    },
+    errorText: {
+        fontFamily: 'Outfit_600SemiBold',
+        color: '#dc2626',
+        fontSize: 12,
+        letterSpacing: 0.5,
+    },
+    card: {
+        backgroundColor: DesignTokens.colors.background,
+        borderWidth: DesignTokens.borders.thick,
+        borderColor: DesignTokens.colors.border,
+        padding: DesignTokens.spacing.lg,
+        width: '100%',
+        maxWidth: 450,
+        shadowColor: DesignTokens.colors.border,
+        shadowOffset: { width: 6, height: 6 },
+        shadowOpacity: 1,
+        shadowRadius: 0,
+        elevation: 8,
+    },
+    cardDesktop: {
+        padding: 32,
+    },
+    label: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 11,
+        color: DesignTokens.colors.text,
+        letterSpacing: 1.5,
+        marginBottom: 8,
+    },
+    input: {
+        backgroundColor: '#F5F5F5',
+        borderWidth: DesignTokens.borders.regular,
+        borderColor: DesignTokens.colors.border,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        fontFamily: 'Outfit_400Regular',
+        color: DesignTokens.colors.text,
+        marginBottom: 20,
+    },
+    submitButton: {
+        marginBottom: 24,
+        marginTop: 8,
+    },
+    submitButtonText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 14,
+        color: DesignTokens.colors.textOnPrimary,
+        letterSpacing: 0.5,
+    },
+    submitButtonArrow: {
+        fontSize: 18,
+        color: DesignTokens.colors.textOnPrimary,
+    },
+    divider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 2,
+        backgroundColor: DesignTokens.colors.border,
+    },
+    dividerText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 11,
+        color: DesignTokens.colors.textLight,
+        marginHorizontal: 16,
+        letterSpacing: 1,
+    },
+    googleButtonText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 12,
+        color: DesignTokens.colors.text,
+        letterSpacing: 0.5,
+    },
+    footer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 24,
+        gap: 8,
+    },
+    footerText: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 14,
+        color: DesignTokens.colors.textLight,
+    },
+    footerLink: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 12,
+        color: DesignTokens.colors.primary,
+        letterSpacing: 0.5,
+    },
+    backButton: {
+        marginTop: 24,
+        alignSelf: 'center',
+    },
+    backButtonText: {
+        fontFamily: 'Outfit_500Medium',
+        fontSize: 12,
+        color: DesignTokens.colors.textLight,
+        letterSpacing: 0.5,
+    },
+});

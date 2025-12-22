@@ -1,37 +1,44 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/Colors';
-import { GlobalStyles } from '../../constants/Theme';
+import { AnimatedButton } from '../../components/AnimatedButton';
+import { TopNav } from '../../components/TopNav';
+import { DesignTokens } from '../../constants/DesignSystem';
 
 import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
 import { Alert } from 'react-native';
-import { auth, db, firebaseConfig } from '../../firebaseConfig';
+import { auth, db } from '../../firebaseConfig';
 
 export default function SignIn() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [debugLog, setDebugLog] = useState<string[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    const { width } = useWindowDimensions();
+    const isDesktop = width > 768;
 
-    const addLog = (msg: string) => {
-        console.log(msg);
-        setDebugLog(prev => [...prev, `${new Date().toLocaleTimeString()}: ${msg}`]);
+    const showAlert = (title: string, message: string) => {
+        const fullMessage = `${title}: ${message}`;
+        setError(fullMessage);
+        if (typeof window !== 'undefined' && !window.navigator.userAgent.includes('Expo')) {
+            window.alert(fullMessage);
+        } else {
+            Alert.alert(title, message);
+        }
     };
 
     const handleSignIn = async () => {
+        setError(null);
         if (!email || !password) {
-            Alert.alert("Error", "Please enter both email and password.");
+            showAlert("Error", "Please enter both email and password.");
             return;
         }
 
         setLoading(true);
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
-
-            // Check for user role
             const userDoc = await getDoc(doc(db, "users", userCredential.user.uid));
 
             if (userDoc.exists()) {
@@ -41,15 +48,21 @@ export default function SignIn() {
                 } else if (userData.role === 'reader') {
                     router.replace('/dashboard/reader');
                 } else {
-                    // No role found, redirect to selection
                     router.replace('/role-selection');
                 }
             } else {
-                // Should not happen for valid users, but handle fallback
                 router.replace('/role-selection');
             }
         } catch (error: any) {
-            Alert.alert("Login Failed", error.message);
+            let errorMessage = error.message;
+            if (error.code === 'auth/user-not-found') {
+                errorMessage = "No account found with this email.";
+            } else if (error.code === 'auth/wrong-password') {
+                errorMessage = "Incorrect password.";
+            } else if (error.code === 'auth/invalid-credential') {
+                errorMessage = "Invalid email or password.";
+            }
+            showAlert("Login Failed", errorMessage);
         } finally {
             setLoading(false);
         }
@@ -57,177 +70,306 @@ export default function SignIn() {
 
     const handleGoogleSignIn = async () => {
         setLoading(true);
-        addLog("Starting Google Sign In...");
-        addLog(`API Key Configured: ${firebaseConfig.apiKey ? "YES (" + firebaseConfig.apiKey.substring(0, 4) + "...)" : "NO"}`);
         try {
             const provider = new GoogleAuthProvider();
-            // Critical fix: Force Google to show account picker every time
             provider.setCustomParameters({ prompt: 'select_account' });
-
-            addLog("Opening popup...");
             const result = await signInWithPopup(auth, provider);
-            addLog(`Popup closed. User: ${result.user.uid}`);
             await checkUserAndRedirect(result.user);
         } catch (error: any) {
-            addLog(`Google Error: ${error.message}`);
-            console.error("Google Sign In Error:", error);
-            Alert.alert("Google Sign In Failed", error.message);
+            showAlert("Google Sign In Failed", error.message);
         } finally {
             setLoading(false);
         }
     };
 
-
     const checkUserAndRedirect = async (user: any) => {
-        addLog(`Checking DB for user ${user.uid}...`);
-
         try {
-            // Log config presence just to be sure
-            addLog(`DB Instance: ${db ? 'Initialized' : 'MISSING'}`);
-            addLog(`Project ID: ${firebaseConfig.projectId}`);
-
-            // Timeout promise
-            addLog("Starting race against timeout...");
             const timeout = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error("Firestore operation timed out (10s)")), 10000)
+                setTimeout(() => reject(new Error("Firestore operation timed out")), 10000)
             );
 
-            // Race getDoc against timeout
             const userDoc: any = await Promise.race([
                 getDoc(doc(db, "users", user.uid)),
                 timeout
             ]);
 
-            addLog(`Doc exists? ${userDoc.exists()}`);
-
             if (userDoc.exists()) {
                 const userData = userDoc.data();
-                addLog(`User Role: ${userData?.role}`);
-
                 if (userData.role === 'author') {
-                    addLog("Checking for existing books...");
-
-                    // Timeout for books query
-                    const bookTimeout = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error("Book query timed out")), 10000)
-                    );
-
                     const booksQ = query(collection(db, "books"), where("authorId", "==", user.uid), limit(1));
-
-                    const booksSnap: any = await Promise.race([
-                        getDocs(booksQ),
-                        bookTimeout
-                    ]);
-
+                    const booksSnap: any = await getDocs(booksQ);
                     if (!booksSnap.empty) {
-                        addLog("Has books. Redirecting...");
                         router.replace('/dashboard/author');
                     } else {
-                        addLog("No books. Redirecting to Onboarding...");
                         router.replace('/onboarding/author/welcome');
                     }
                 } else if (userData.role === 'reader') {
-                    addLog("Redirecting to Reader...");
                     router.replace('/dashboard/reader');
                 } else {
-                    addLog("No role. Redirecting to Selection...");
                     router.replace('/role-selection');
                 }
             } else {
-                addLog("New user. Creating profile...");
-                // New user via social auth
                 await setDoc(doc(db, "users", user.uid), {
                     email: user.email,
                     createdAt: new Date()
                 });
-                addLog("Profile created. Redirecting to Selection...");
                 router.replace('/role-selection');
             }
         } catch (error: any) {
-            addLog(`DB Error: ${error.message}`);
-            console.error("Error in checkUserAndRedirect:", error);
-            Alert.alert("Error", "Failed to get user profile: " + error.message);
+            showAlert("Error", "Failed to get user profile: " + error.message);
         }
     };
 
     return (
-        <SafeAreaView style={[GlobalStyles.container, { justifyContent: 'center', backgroundColor: Colors.classic.background }]}>
-            <View style={{ marginBottom: 30 }}>
-                <Text style={[GlobalStyles.title, { color: Colors.classic.primary, textAlign: 'center' }]}>Welcome Back</Text>
-                <Text style={{ textAlign: 'center', fontSize: 10, color: 'gray' }}>v1.2 (Long Polling)</Text>
-                <Text style={[GlobalStyles.subtitle, { textAlign: 'center', color: Colors.classic.textSecondary }]}>Sign in to continue your journey</Text>
-            </View>
+        <SafeAreaView style={styles.container}>
+            <TopNav showLogout={false} />
 
-            <View style={GlobalStyles.card}>
-                <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Email</Text>
-                <TextInput
-                    style={GlobalStyles.input}
-                    placeholder="hello@example.com"
-                    placeholderTextColor="#999"
-                    value={email}
-                    onChangeText={setEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                />
-
-                <Text style={{ marginBottom: 5, fontWeight: '600', color: Colors.classic.text }}>Password</Text>
-                <TextInput
-                    style={GlobalStyles.input}
-                    placeholder="********"
-                    placeholderTextColor="#999"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                />
-
-                <TouchableOpacity style={{ alignSelf: 'flex-end', marginBottom: 20 }}>
-                    <Text style={{ color: Colors.classic.primary }}>Forgot Password?</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: Colors.classic.primary }]}
-                    onPress={handleSignIn}
-                >
-                    <Text style={GlobalStyles.buttonText}>Sign In</Text>
-                </TouchableOpacity>
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 20 }}>
-                    <View style={{ flex: 1, height: 1, backgroundColor: Colors.classic.border }} />
-                    <Text style={{ marginHorizontal: 10, color: Colors.classic.textSecondary }}>OR</Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: Colors.classic.border }} />
+            <ScrollView
+                contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <Text style={[styles.title, isDesktop && styles.titleDesktop]}>WELCOME BACK</Text>
+                    <Text style={styles.subtitle}>Sign in to continue your journey</Text>
                 </View>
 
-                <TouchableOpacity
-                    style={[GlobalStyles.button, { backgroundColor: 'white', borderWidth: 1, borderColor: Colors.classic.border, marginBottom: 10 }]}
-                    onPress={handleGoogleSignIn}
-                    disabled={loading}
+                {/* Error Banner */}
+                {error && (
+                    <View style={styles.errorBanner}>
+                        <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                )}
+
+                {/* Form Card */}
+                <View style={[styles.card, isDesktop && styles.cardDesktop]}>
+                    <Text style={styles.label}>EMAIL</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="hello@example.com"
+                        placeholderTextColor={DesignTokens.colors.textLight}
+                        value={email}
+                        onChangeText={setEmail}
+                        autoCapitalize="none"
+                        keyboardType="email-address"
+                    />
+
+                    <Text style={styles.label}>PASSWORD</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="••••••••"
+                        placeholderTextColor={DesignTokens.colors.textLight}
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry
+                    />
+
+                    <AnimatedButton variant="outline" style={styles.forgotButton}>
+                        <Text style={styles.forgotText}>FORGOT PASSWORD?</Text>
+                    </AnimatedButton>
+
+                    <AnimatedButton
+                        variant="primary"
+                        onPress={handleSignIn}
+                        style={styles.submitButton}
+                    >
+                        <Text style={styles.submitButtonText}>
+                            {loading ? "SIGNING IN..." : "SIGN IN"}
+                        </Text>
+                        <Text style={styles.submitButtonArrow}>→</Text>
+                    </AnimatedButton>
+
+                    {/* Divider */}
+                    <View style={styles.divider}>
+                        <View style={styles.dividerLine} />
+                        <Text style={styles.dividerText}>OR</Text>
+                        <View style={styles.dividerLine} />
+                    </View>
+
+                    <AnimatedButton
+                        variant="secondary"
+                        onPress={handleGoogleSignIn}
+                    >
+                        <Text style={styles.googleButtonText}>CONTINUE WITH GOOGLE</Text>
+                    </AnimatedButton>
+                </View>
+
+                {/* Footer */}
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>Don't have an account? </Text>
+                    <AnimatedButton variant="outline" onPress={() => router.push('/auth/sign-up')}>
+                        <Text style={styles.footerLink}>SIGN UP</Text>
+                    </AnimatedButton>
+                </View>
+
+                <AnimatedButton
+                    variant="outline"
+                    onPress={() => router.back()}
+                    style={styles.backButton}
                 >
-                    <Text style={[GlobalStyles.buttonText, { color: Colors.classic.text }]}>Continue with Google</Text>
-                </TouchableOpacity>
-
-            </View>
-
-            <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 20 }}>
-                <Text style={{ color: Colors.classic.textSecondary }}>Don't have an account? </Text>
-                <TouchableOpacity onPress={() => router.push('/auth/sign-up')}>
-                    <Text style={{ color: Colors.classic.primary, fontWeight: 'bold' }}>Sign Up</Text>
-                </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-                style={{ marginTop: 40, alignSelf: 'center' }}
-                onPress={() => router.back()}
-            >
-                <Text style={{ color: Colors.classic.textSecondary }}>Back to Home</Text>
-            </TouchableOpacity>
-
-            {/* ERROR / DEBUG LOG DISPLAY */}
-            <View style={{ marginTop: 20, padding: 10, backgroundColor: '#f0f0f0', borderRadius: 5, width: '100%', maxHeight: 200 }}>
-                <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>Debug Logs:</Text>
-                {debugLog.map((log, i) => (
-                    <Text key={i} style={{ fontSize: 10, fontFamily: 'SpaceMono' }}>{log}</Text>
-                ))}
-            </View>
+                    <Text style={styles.backButtonText}>← BACK TO HOME</Text>
+                </AnimatedButton>
+            </ScrollView>
         </SafeAreaView>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: DesignTokens.colors.background,
+    },
+    content: {
+        flexGrow: 1,
+        paddingHorizontal: 20,
+        paddingVertical: 30,
+    },
+    contentDesktop: {
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
+    header: {
+        marginBottom: 30,
+        alignItems: 'center',
+    },
+    title: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 32,
+        color: DesignTokens.colors.text,
+        letterSpacing: 2,
+        marginBottom: 8,
+    },
+    titleDesktop: {
+        fontSize: 48,
+    },
+    subtitle: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 16,
+        color: DesignTokens.colors.textLight,
+    },
+    errorBanner: {
+        backgroundColor: '#fee2e2',
+        borderWidth: DesignTokens.borders.regular,
+        borderColor: '#ef4444',
+        padding: 16,
+        marginBottom: 20,
+        width: '100%',
+        maxWidth: 450,
+    },
+    errorText: {
+        fontFamily: 'Outfit_600SemiBold',
+        color: '#dc2626',
+        fontSize: 12,
+        letterSpacing: 0.5,
+    },
+    card: {
+        backgroundColor: DesignTokens.colors.background,
+        borderWidth: DesignTokens.borders.thick,
+        borderColor: DesignTokens.colors.border,
+        padding: DesignTokens.spacing.lg,
+        width: '100%',
+        maxWidth: 450,
+        // Hard offset shadow
+        shadowColor: DesignTokens.colors.border,
+        shadowOffset: { width: 6, height: 6 },
+        shadowOpacity: 1,
+        shadowRadius: 0,
+        elevation: 8,
+    },
+    cardDesktop: {
+        padding: 32,
+    },
+    label: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 11,
+        color: DesignTokens.colors.text,
+        letterSpacing: 1.5,
+        marginBottom: 8,
+    },
+    input: {
+        backgroundColor: '#F5F5F5',
+        borderWidth: DesignTokens.borders.regular,
+        borderColor: DesignTokens.colors.border,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        fontFamily: 'Outfit_400Regular',
+        color: DesignTokens.colors.text,
+        marginBottom: 20,
+    },
+    forgotButton: {
+        alignSelf: 'flex-end',
+        marginBottom: 20,
+    },
+    forgotText: {
+        fontFamily: 'Outfit_600SemiBold',
+        fontSize: 11,
+        color: DesignTokens.colors.textLight,
+        letterSpacing: 0.5,
+    },
+    submitButton: {
+        marginBottom: 24,
+    },
+    submitButtonText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 14,
+        color: DesignTokens.colors.textOnPrimary,
+        letterSpacing: 0.5,
+    },
+    submitButtonArrow: {
+        fontSize: 18,
+        color: DesignTokens.colors.textOnPrimary,
+    },
+    divider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 2,
+        backgroundColor: DesignTokens.colors.border,
+    },
+    dividerText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 11,
+        color: DesignTokens.colors.textLight,
+        marginHorizontal: 16,
+        letterSpacing: 1,
+    },
+    googleButtonText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 12,
+        color: DesignTokens.colors.text,
+        letterSpacing: 0.5,
+    },
+    footer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 24,
+        gap: 8,
+    },
+    footerText: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 14,
+        color: DesignTokens.colors.textLight,
+    },
+    footerLink: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 12,
+        color: DesignTokens.colors.primary,
+        letterSpacing: 0.5,
+    },
+    backButton: {
+        marginTop: 24,
+        alignSelf: 'center',
+    },
+    backButtonText: {
+        fontFamily: 'Outfit_500Medium',
+        fontSize: 12,
+        color: DesignTokens.colors.textLight,
+        letterSpacing: 0.5,
+    },
+});

@@ -22,16 +22,21 @@ export const Colors = {
     text: '#312E81',
   },
   reader: {
-    primary: '#10B981', // Emerald
-    secondary: '#34D399',
-    background: '#ECFDF5',
-    text: '#064E3B',
+    primary: '#2D6A6A', // Deep Teal - Primary actions/text
+    secondary: '#D4E8E8', // Soft Sage - Accents/Highlights
+    background: '#FFFFFF', // Pure White - Clean
+    surface: '#FFFFFF', // White - Cards
+    text: '#2D6A6A', // Deep Teal - Primary Text
+    textSecondary: '#5A8A8A', // Medium Teal - Secondary Text
+    textLight: '#FFFFFF', // White - Text on Primary Buttons
+    border: '#C5DEDE', // Light Sage border
+    accent: '#4A9090', // Brighter Teal for highlights
   },
 
   // Clean Magic Theme (White & Wine Berry)
   classic: {
     primary: '#511545', // Wine Berry (Deep Plum) - Actions/Text
-    secondary: '#FBDBDE', // Azalea (Soft Pink) - Accents/Highlights
+    secondary: '#FBDBDE', // Azalea (Soft Pink) - Accents/Highlights (Author mode)
     background: '#FFFFFF', // Pure White - Main Clean Background
     surface: '#FFFFFF', // White - Cards/Inputs
     text: '#511545', // Wine Berry - Primary Text
@@ -39,6 +44,15 @@ export const Colors = {
     textLight: '#FFFFFF', // White - Text on Primary Buttons
     border: '#FBDBDE', // Azalea for subtle borders
     error: '#E53E3E',
+
+    // Reader Mode Accent (Soft Blue instead of Azalea)
+    readerAccent: '#C5D4E8', // Soft Blue - Reader highlights
+    readerBorder: '#B8CAE0', // Slightly deeper blue for borders
+
+    // Clarity Status Colors (On-Brand)
+    clarityReady: '#511545', // Wine Berry - Ready/Complete
+    clarityGood: '#8E487F', // Lighter Plum - Good progress
+    clarityNeedsWork: '#C97B89', // Soft Rose - Needs attention
 
     // Brand Identity
     brand: {
