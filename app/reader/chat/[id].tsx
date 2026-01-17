@@ -1,12 +1,37 @@
-import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Colors } from '../../../constants/Colors';
-import { GlobalStyles } from '../../../constants/Theme';
-import { auth, db } from '../../../firebaseConfig';
+import {
+    ActivityIndicator,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+} from 'react-native';
+import Animated, {
+    Easing,
+    FadeIn,
+    FadeInDown,
+    FadeInUp,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
+} from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { EvalReportCard, EvalResult } from '../../../components/EvalReportCard';
+import { DesignTokens } from '../../../constants/DesignSystem';
+import { auth, db, functions } from '../../../firebaseConfig';
 import { ChatService } from '../../../services/ChatService';
 
 type Message = {
@@ -15,48 +40,119 @@ type Message = {
     sender: 'user' | 'character';
 };
 
-// Typing indicator with animated dots
-const TypingIndicator = ({ characterName }: { characterName: string }) => (
-    <View style={{
-        alignSelf: 'flex-start',
-        backgroundColor: Colors.classic.surface,
-        padding: 14,
-        paddingHorizontal: 18,
-        borderRadius: 18,
-        borderBottomLeftRadius: 4,
-        borderWidth: 1,
-        borderColor: Colors.classic.border,
-        maxWidth: '80%',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8
-    }}>
-        <View style={{ flexDirection: 'row', gap: 4 }}>
-            {[0, 1, 2].map(i => (
-                <View key={i} style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor: Colors.classic.primary,
-                    opacity: 0.6
-                }} />
-            ))}
-        </View>
-        <Text style={{ fontSize: 12, color: Colors.classic.textSecondary, fontStyle: 'italic' }}>
-            {characterName} is typing...
-        </Text>
-    </View>
-);
+// Animated typing dots
+function TypingDot({ delay }: { delay: number }) {
+    const opacity = useSharedValue(0.3);
+
+    useEffect(() => {
+        opacity.value = withRepeat(
+            withSequence(
+                withTiming(1, { duration: 400, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0.3, { duration: 400, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1,
+            false
+        );
+    }, []);
+
+    const animStyle = useAnimatedStyle(() => ({
+        opacity: opacity.value,
+    }));
+
+    return (
+        <Animated.View style={[styles.typingDot, animStyle, { marginLeft: delay > 0 ? 4 : 0 }]} />
+    );
+}
+
+// Typing indicator component
+function TypingIndicator({ characterName }: { characterName: string }) {
+    return (
+        <Animated.View entering={FadeIn.duration(300)} style={styles.typingContainer}>
+            <View style={styles.typingDots}>
+                <TypingDot delay={0} />
+                <TypingDot delay={100} />
+                <TypingDot delay={200} />
+            </View>
+            <Text style={styles.typingText}>{characterName} is composing...</Text>
+        </Animated.View>
+    );
+}
+
+// Message bubble component
+function MessageBubble({ message, characterName }: { message: Message; characterName: string }) {
+    const isUser = message.sender === 'user';
+
+    return (
+        <Animated.View
+            entering={isUser ? FadeInUp.duration(300) : FadeInDown.duration(300)}
+            style={[
+                styles.messageBubble,
+                isUser ? styles.userBubble : styles.characterBubble,
+            ]}
+        >
+            {!isUser && (
+                <View style={styles.characterLabel}>
+                    <Text style={styles.characterLabelText}>{characterName}</Text>
+                </View>
+            )}
+            <Text style={[styles.messageText, isUser && styles.userMessageText]}>
+                {message.text}
+            </Text>
+        </Animated.View>
+    );
+}
 
 export default function ChatScreen() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
     const [character, setCharacter] = useState<any>(null);
+    const [book, setBook] = useState<any>(null);
     const [message, setMessage] = useState('');
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [typing, setTyping] = useState(false);
+    const [inputFocused, setInputFocused] = useState(false);
     const flatListRef = useRef<FlatList>(null);
+
+    // Eval State
+    const [evalModalVisible, setEvalModalVisible] = useState(false);
+    const [evalResult, setEvalResult] = useState<EvalResult | null>(null);
+    const [evalLoading, setEvalLoading] = useState(false);
+
+    const handleRunEval = async () => {
+        if (!character) return;
+        setEvalLoading(true);
+        setEvalModalVisible(true);
+        // Clear previous result if re-running
+        if (evalResult) setEvalResult(null);
+
+        try {
+            // Format messages for backend
+            // Start from latest back to earliest (or backend handles order? usually list is cronological)
+            // Local messages are cronological.
+            // Filter out init message if needed, or include it.
+            const conversationHistory = messages
+                .filter(m => m.id !== 'init')
+                .map(m => ({
+                    sender: m.sender,
+                    text: m.text
+                }));
+
+            const evaluateConversation = httpsCallable(functions, 'evaluateCurrentConversation');
+            const result = await evaluateConversation({
+                characterId: character.id || id, // id from params is doc id
+                conversationHistory
+            });
+
+            setEvalResult(result.data as EvalResult);
+        } catch (error) {
+            console.error("Eval failed:", error);
+            alert("Failed to run evaluation. See console.");
+            setEvalModalVisible(false);
+        } finally {
+            setEvalLoading(false);
+        }
+    };
 
     useEffect(() => {
         const fetchCharacter = async () => {
@@ -68,16 +164,25 @@ export default function ChatScreen() {
                     const charData = snap.data();
                     setCharacter(charData);
 
-                    // Dynamic, engaging greeting based on character
+                    // Fetch book info
+                    if (charData.bookId) {
+                        const bookRef = doc(db, "books", charData.bookId);
+                        const bookSnap = await getDoc(bookRef);
+                        if (bookSnap.exists()) {
+                            setBook(bookSnap.data());
+                        }
+                    }
+
+                    // Dynamic greeting
                     const greetings = [
-                        `*${charData.name} notices you and turns to face you with curiosity.*`,
-                        `*${charData.name} looks up, meeting your gaze.*`,
-                        `*${charData.name} pauses, sensing your presence.*`
+                        `*${charData.name} notices your presence and turns with quiet curiosity.*`,
+                        `*${charData.name} looks up from their thoughts, acknowledging you with a subtle nod.*`,
+                        `*A moment passes before ${charData.name} speaks, their gaze meeting yours.*`,
                     ];
                     const greeting = {
                         id: 'init',
                         text: greetings[Math.floor(Math.random() * greetings.length)],
-                        sender: 'character' as const
+                        sender: 'character' as const,
                     };
                     setMessages([greeting]);
                 }
@@ -94,19 +199,23 @@ export default function ChatScreen() {
         if (!message.trim() || typing) return;
 
         const userMessage = message.trim();
-        const updatedMessages = [...messages, { id: Date.now().toString(), text: userMessage, sender: 'user' as const }];
+        const updatedMessages = [
+            ...messages,
+            { id: Date.now().toString(), text: userMessage, sender: 'user' as const },
+        ];
         setMessages(updatedMessages);
         setMessage('');
         setTyping(true);
 
-        // Scroll to bottom after adding message
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
         try {
-            const history = messages.filter(m => m.id !== 'init').map(m => ({
-                role: (m.sender === 'user' ? 'user' : 'model') as "user" | "model",
-                parts: [{ text: m.text }]
-            }));
+            const history = messages
+                .filter((m) => m.id !== 'init')
+                .map((m) => ({
+                    role: (m.sender === 'user' ? 'user' : 'model') as 'user' | 'model',
+                    parts: [{ text: m.text }],
+                }));
 
             const responseText = await ChatService.sendMessage(
                 userMessage,
@@ -115,22 +224,26 @@ export default function ChatScreen() {
                 history
             );
 
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: responseText, sender: 'character' as const }]);
+            setMessages((prev) => [
+                ...prev,
+                { id: Date.now().toString(), text: responseText, sender: 'character' as const },
+            ]);
         } catch (error) {
             console.error(error);
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: "*appears momentarily distracted* I beg your pardon, I seem to have lost my train of thought. Could you repeat that?",
-                sender: 'character' as const
-            }]);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: Date.now().toString(),
+                    text: '*appears momentarily distracted* I beg your pardon, I seem to have lost my train of thought. Could you repeat that?',
+                    sender: 'character' as const,
+                },
+            ]);
         } finally {
             setTyping(false);
         }
     };
 
-    // Handle Enter key to send (web and desktop)
     const handleKeyPress = (e: any) => {
-        // Check for Enter without Shift (Shift+Enter for new line)
         if (e.nativeEvent?.key === 'Enter' && !e.nativeEvent?.shiftKey) {
             e.preventDefault?.();
             handleSend();
@@ -139,155 +252,501 @@ export default function ChatScreen() {
 
     if (loading) {
         return (
-            <View style={[GlobalStyles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator size="large" color={Colors.classic.primary} />
-                <Text style={{ marginTop: 10, color: Colors.classic.textSecondary }}>Loading character...</Text>
-            </View>
+            <SafeAreaView style={styles.loadingContainer}>
+                <LinearGradient
+                    colors={[DesignTokens.colors.background, DesignTokens.colors.backgroundAlt]}
+                    style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.loadingContent}>
+                    <Text style={styles.loadingOrnament}>~</Text>
+                    <ActivityIndicator size="large" color={DesignTokens.colors.accent} />
+                    <Text style={styles.loadingText}>Entering the story...</Text>
+                </View>
+            </SafeAreaView>
         );
     }
 
     if (!character) {
         return (
-            <View style={[GlobalStyles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: Colors.classic.textSecondary }}>Character not found</Text>
-                <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 15 }}>
-                    <Text style={{ color: Colors.classic.primary }}>Go Back</Text>
-                </TouchableOpacity>
-            </View>
+            <SafeAreaView style={styles.loadingContainer}>
+                <LinearGradient
+                    colors={[DesignTokens.colors.background, DesignTokens.colors.backgroundAlt]}
+                    style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.loadingContent}>
+                    <Text style={styles.errorOrnament}>"</Text>
+                    <Text style={styles.errorTitle}>Character not found</Text>
+                    <Text style={styles.errorText}>This character may have been removed.</Text>
+                    <Pressable onPress={() => router.back()} style={styles.backLink}>
+                        <Text style={styles.backLinkText}>Return to stories</Text>
+                    </Pressable>
+                </View>
+            </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={[GlobalStyles.container, { backgroundColor: Colors.classic.background }]}>
+        <SafeAreaView style={styles.container}>
+            {/* Background */}
+            <LinearGradient
+                colors={[DesignTokens.colors.background, DesignTokens.colors.backgroundAlt]}
+                style={StyleSheet.absoluteFill}
+            />
+
             {/* Header */}
-            <View style={{
-                padding: 15,
-                borderBottomWidth: 1,
-                borderColor: Colors.classic.border,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                backgroundColor: 'white'
-            }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 15, padding: 4 }}>
-                        <Ionicons name="arrow-back" size={24} color={Colors.classic.text} />
-                    </TouchableOpacity>
-                    <View style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 20,
-                        backgroundColor: Colors.classic.secondary,
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        marginRight: 10
-                    }}>
-                        <Text style={{ fontSize: 18 }}>👤</Text>
+            <Animated.View entering={FadeInDown.duration(400)} style={styles.header}>
+                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                    <Text style={styles.backArrow}>{'<'}</Text>
+                </Pressable>
+
+                <View style={styles.headerCenter}>
+                    <View style={styles.characterAvatar}>
+                        <Text style={styles.characterAvatarText}>
+                            {character.name?.[0]?.toUpperCase()}
+                        </Text>
                     </View>
-                    <View>
-                        <Text style={{ fontFamily: 'Outfit_600SemiBold', fontSize: 17, color: Colors.classic.text }}>{character.name}</Text>
-                        <Text style={{ fontSize: 12, color: Colors.classic.textSecondary }}>{character.role}</Text>
+                    <View style={styles.headerInfo}>
+                        <Text style={styles.characterName}>{character.name}</Text>
+                        <Text style={styles.characterMeta}>
+                            {character.role} {book?.title ? `· ${book.title}` : ''}
+                        </Text>
                     </View>
                 </View>
-                <TouchableOpacity
-                    onPress={async () => {
-                        await signOut(auth);
-                        router.replace('/');
-                    }}
-                    style={{ padding: 8 }}
-                >
-                    <Ionicons name="log-out-outline" size={22} color={Colors.classic.textSecondary} />
-                </TouchableOpacity>
-            </View>
+
+                <View style={styles.headerButtons}>
+                    <Pressable
+                        onPress={handleRunEval}
+                        style={styles.evalButton}
+                    >
+                        <Text style={styles.evalButtonText}>Eval</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={async () => {
+                            await signOut(auth);
+                            router.replace('/');
+                        }}
+                        style={styles.headerAction}
+                    >
+                        <Text style={styles.headerActionText}>Exit</Text>
+                    </Pressable>
+                </View>
+            </Animated.View>
 
             {/* Chat Messages */}
             <FlatList
                 ref={flatListRef}
                 data={messages}
-                keyExtractor={item => item.id}
-                contentContainerStyle={{ padding: 15, paddingBottom: 10 }}
-                ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.messagesList}
+                ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
                 onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-                ListFooterComponent={typing ? <View style={{ marginTop: 12 }}><TypingIndicator characterName={character.name} /></View> : null}
-                renderItem={({ item }) => (
-                    <View style={{
-                        alignSelf: item.sender === 'user' ? 'flex-end' : 'flex-start',
-                        backgroundColor: item.sender === 'user' ? Colors.classic.primary : Colors.classic.surface,
-                        padding: 14,
-                        borderRadius: 18,
-                        maxWidth: '80%',
-                        borderBottomRightRadius: item.sender === 'user' ? 4 : 18,
-                        borderBottomLeftRadius: item.sender === 'character' ? 4 : 18,
-                        borderWidth: item.sender === 'character' ? 1 : 0,
-                        borderColor: Colors.classic.border,
-                        // Subtle shadow for depth
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.05,
-                        shadowRadius: 2,
-                        elevation: 1
-                    }}>
-                        <Text style={{
-                            color: item.sender === 'user' ? 'white' : Colors.classic.text,
-                            fontFamily: 'Outfit_400Regular',
-                            fontSize: 15,
-                            lineHeight: 22
-                        }}>{item.text}</Text>
+                ListHeaderComponent={() => (
+                    <View style={styles.conversationStart}>
+                        <View style={styles.ornamentLine} />
+                        <Text style={styles.conversationStartText}>Conversation begins</Text>
+                        <View style={styles.ornamentLine} />
                     </View>
+                )}
+                ListFooterComponent={
+                    typing ? (
+                        <View style={{ marginTop: 16 }}>
+                            <TypingIndicator characterName={character.name} />
+                        </View>
+                    ) : null
+                }
+                renderItem={({ item }) => (
+                    <MessageBubble message={item} characterName={character.name} />
                 )}
             />
 
             {/* Input Area */}
-            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={10}>
-                <View style={{
-                    flexDirection: 'row',
-                    padding: 12,
-                    paddingHorizontal: 16,
-                    borderTopWidth: 1,
-                    borderColor: Colors.classic.border,
-                    backgroundColor: 'white',
-                    alignItems: 'center',
-                }}>
-                    <TextInput
-                        style={{
-                            flex: 1,
-                            backgroundColor: '#f5f5f5',
-                            borderRadius: 22,
-                            paddingHorizontal: 16,
-                            paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-                            fontFamily: 'Outfit_400Regular',
-                            fontSize: 15,
-                            maxHeight: 100,
-                            minHeight: 44,
-                            borderWidth: 1,
-                            borderColor: '#e0e0e0',
-                        }}
-                        placeholder="Type your message..."
-                        placeholderTextColor="#999"
-                        value={message}
-                        onChangeText={setMessage}
-                        onKeyPress={handleKeyPress}
-                        multiline
-                        blurOnSubmit={false}
-                        returnKeyType="default"
-                    />
-                    <TouchableOpacity
-                        onPress={handleSend}
-                        disabled={!message.trim() || typing}
-                        style={{
-                            backgroundColor: message.trim() && !typing ? Colors.classic.primary : '#ddd',
-                            width: 44,
-                            height: 44,
-                            borderRadius: 22,
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            marginLeft: 10,
-                        }}
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={10}
+            >
+                <Animated.View entering={FadeInUp.duration(400)} style={styles.inputContainer}>
+                    <View
+                        style={[
+                            styles.inputWrapper,
+                            inputFocused && styles.inputWrapperFocused,
+                        ]}
                     >
-                        <Ionicons name="send" size={18} color="white" />
-                    </TouchableOpacity>
-                </View>
+                        <TextInput
+                            style={styles.textInput}
+                            placeholder="Write your message..."
+                            placeholderTextColor={DesignTokens.colors.textMuted}
+                            value={message}
+                            onChangeText={setMessage}
+                            onKeyPress={handleKeyPress}
+                            onFocus={() => setInputFocused(true)}
+                            onBlur={() => setInputFocused(false)}
+                            multiline
+                            blurOnSubmit={false}
+                            returnKeyType="default"
+                        />
+                        <Pressable
+                            onPress={handleSend}
+                            disabled={!message.trim() || typing}
+                            style={[
+                                styles.sendButton,
+                                (!message.trim() || typing) && styles.sendButtonDisabled,
+                            ]}
+                        >
+                            <Text style={styles.sendButtonText}>{'>'}</Text>
+                        </Pressable>
+                    </View>
+                    <Text style={styles.inputHint}>Press Enter to send</Text>
+                </Animated.View>
             </KeyboardAvoidingView>
-        </SafeAreaView>
+
+            {/* Eval Modal */}
+            <Modal
+                visible={evalModalVisible}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setEvalModalVisible(false)}
+            >
+                <SafeAreaView style={styles.modalContainer}>
+                    <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>Evaluator</Text>
+                        <Pressable onPress={() => setEvalModalVisible(false)} style={styles.closeButton}>
+                            <Text style={styles.closeButtonText}>Close</Text>
+                        </Pressable>
+                    </View>
+                    <ScrollView contentContainerStyle={styles.modalContent}>
+                        <EvalReportCard
+                            evalResult={evalResult}
+                            loading={evalLoading}
+                            onRunEval={handleRunEval}
+                        />
+                    </ScrollView>
+                </SafeAreaView>
+            </Modal>
+        </SafeAreaView >
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: DesignTokens.colors.background,
+    },
+
+    // Loading
+    loadingContainer: {
+        flex: 1,
+        backgroundColor: DesignTokens.colors.background,
+    },
+    loadingContent: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 40,
+    },
+    loadingOrnament: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 48,
+        color: DesignTokens.colors.accent,
+        marginBottom: 20,
+    },
+    loadingText: {
+        fontFamily: 'Lora-Italic',
+        fontSize: 16,
+        color: DesignTokens.colors.textSecondary,
+        marginTop: 16,
+    },
+    errorOrnament: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 60,
+        color: DesignTokens.colors.accent,
+        opacity: 0.3,
+        marginBottom: 12,
+    },
+    errorTitle: {
+        fontFamily: 'PlayfairDisplay-SemiBold',
+        fontSize: 22,
+        color: DesignTokens.colors.text,
+        marginBottom: 8,
+    },
+    errorText: {
+        fontFamily: 'Lora',
+        fontSize: 15,
+        color: DesignTokens.colors.textMuted,
+        marginBottom: 24,
+    },
+    backLink: {
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        backgroundColor: DesignTokens.colors.accent,
+        borderRadius: DesignTokens.radius.md,
+    },
+    backLinkText: {
+        fontFamily: 'Raleway-SemiBold',
+        fontSize: 14,
+        color: DesignTokens.colors.textOnAccent,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+
+    // Header
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: DesignTokens.colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: DesignTokens.colors.border,
+        ...DesignTokens.shadows.subtle,
+    },
+    backButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: DesignTokens.colors.backgroundAlt,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    backArrow: {
+        fontFamily: 'Lora',
+        fontSize: 20,
+        color: DesignTokens.colors.textSecondary,
+    },
+    headerCenter: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: 16,
+    },
+    characterAvatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: DesignTokens.colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    characterAvatarText: {
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 18,
+        color: DesignTokens.colors.textOnDark,
+    },
+    headerInfo: {
+        flex: 1,
+    },
+    characterName: {
+        fontFamily: 'PlayfairDisplay-SemiBold',
+        fontSize: 17,
+        color: DesignTokens.colors.text,
+    },
+    characterMeta: {
+        fontFamily: 'Lora',
+        fontSize: 12,
+        color: DesignTokens.colors.textMuted,
+        marginTop: 2,
+    },
+    headerAction: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+    },
+    headerActionText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 13,
+        color: DesignTokens.colors.textMuted,
+    },
+    headerButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    evalButton: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        backgroundColor: DesignTokens.colors.primary, // Or maybe an outlined style? Primary stands out.
+        borderRadius: 6,
+    },
+    evalButtonText: {
+        fontFamily: 'Outfit_700Bold', // Using Outfit as in EvalReportCard for consistency
+        fontSize: 12,
+        color: DesignTokens.colors.textOnDark,
+        letterSpacing: 0.5,
+    },
+
+    // Modal
+    modalContainer: {
+        flex: 1,
+        backgroundColor: '#fff',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+    },
+    modalTitle: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 18,
+        color: DesignTokens.colors.text,
+    },
+    closeButton: {
+        padding: 8,
+    },
+    closeButtonText: {
+        fontFamily: 'Outfit_500Medium',
+        fontSize: 16,
+        color: DesignTokens.colors.primary,
+    },
+    modalContent: {
+        padding: 20,
+    },
+
+    // Messages
+    messagesList: {
+        padding: 20,
+        paddingBottom: 16,
+    },
+    conversationStart: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 24,
+        gap: 12,
+    },
+    ornamentLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: DesignTokens.colors.border,
+        maxWidth: 60,
+    },
+    conversationStartText: {
+        fontFamily: 'Lora-Italic',
+        fontSize: 12,
+        color: DesignTokens.colors.textMuted,
+    },
+    messageBubble: {
+        maxWidth: '85%',
+        padding: 16,
+        borderRadius: DesignTokens.radius.lg,
+    },
+    userBubble: {
+        alignSelf: 'flex-end',
+        backgroundColor: DesignTokens.colors.primary,
+        borderBottomRightRadius: 4,
+        ...DesignTokens.shadows.soft,
+    },
+    characterBubble: {
+        alignSelf: 'flex-start',
+        backgroundColor: DesignTokens.colors.surface,
+        borderBottomLeftRadius: 4,
+        borderWidth: 1,
+        borderColor: DesignTokens.colors.border,
+        ...DesignTokens.shadows.subtle,
+    },
+    characterLabel: {
+        marginBottom: 8,
+    },
+    characterLabelText: {
+        fontFamily: 'Raleway-SemiBold',
+        fontSize: 11,
+        color: DesignTokens.colors.accent,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    messageText: {
+        fontFamily: 'Lora',
+        fontSize: 15,
+        color: DesignTokens.colors.text,
+        lineHeight: 24,
+    },
+    userMessageText: {
+        color: DesignTokens.colors.textOnDark,
+    },
+
+    // Typing Indicator
+    typingContainer: {
+        alignSelf: 'flex-start',
+        backgroundColor: DesignTokens.colors.surface,
+        padding: 14,
+        paddingHorizontal: 18,
+        borderRadius: DesignTokens.radius.lg,
+        borderBottomLeftRadius: 4,
+        borderWidth: 1,
+        borderColor: DesignTokens.colors.border,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    typingDots: {
+        flexDirection: 'row',
+    },
+    typingDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: DesignTokens.colors.accent,
+    },
+    typingText: {
+        fontFamily: 'Lora-Italic',
+        fontSize: 13,
+        color: DesignTokens.colors.textMuted,
+    },
+
+    // Input
+    inputContainer: {
+        padding: 16,
+        paddingTop: 12,
+        backgroundColor: DesignTokens.colors.surface,
+        borderTopWidth: 1,
+        borderTopColor: DesignTokens.colors.border,
+    },
+    inputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        backgroundColor: DesignTokens.colors.backgroundAlt,
+        borderRadius: DesignTokens.radius.xl,
+        borderWidth: 1,
+        borderColor: DesignTokens.colors.border,
+        paddingLeft: 18,
+        paddingRight: 6,
+        paddingVertical: 6,
+    },
+    inputWrapperFocused: {
+        borderColor: DesignTokens.colors.accent,
+    },
+    textInput: {
+        flex: 1,
+        fontFamily: 'Lora',
+        fontSize: 15,
+        color: DesignTokens.colors.text,
+        paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+        maxHeight: 120,
+        minHeight: 40,
+    },
+    sendButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: DesignTokens.colors.accent,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    sendButtonDisabled: {
+        backgroundColor: DesignTokens.colors.border,
+    },
+    sendButtonText: {
+        fontFamily: 'Lora-Bold',
+        fontSize: 18,
+        color: DesignTokens.colors.textOnAccent,
+    },
+    inputHint: {
+        fontFamily: 'Raleway',
+        fontSize: 11,
+        color: DesignTokens.colors.textMuted,
+        textAlign: 'center',
+        marginTop: 8,
+    },
+});

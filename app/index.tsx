@@ -1,46 +1,117 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
-import React, { useRef, useState } from 'react';
-import { Dimensions, FlatList, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, { useSharedValue } from 'react-native-reanimated';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+    Dimensions,
+    FlatList,
+    Pressable,
+    StatusBar,
+    StyleSheet,
+    Text,
+    View,
+    useWindowDimensions,
+} from 'react-native';
+import Animated, {
+    Easing,
+    FadeIn,
+    FadeInDown,
+    FadeInUp,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withDelay,
+    withRepeat,
+    withSequence,
+    withTiming,
+} from 'react-native-reanimated';
 import { AnimatedButton } from '../components/AnimatedButton';
 import { DesignTokens } from '../constants/DesignSystem';
 import { useAuth } from '../context/AuthContext';
 import { auth } from '../firebaseConfig';
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const SLIDES = [
     {
         id: '1',
-        title: 'WHERE STORIES COME ALIVE',
-        subtitle: 'Experience books like never before with interactive characters and worlds.',
-        image: require('../assets/images/onboarding-1.png'),
+        title: 'Where Stories\nCome Alive',
+        subtitle: 'Experience literature reimagined. Engage with characters who remember, respond, and evolve with every conversation.',
+        ornament: '"',
     },
     {
         id: '2',
-        title: 'CREATE YOUR UNIVERSE',
-        subtitle: 'Authors can build rich worlds and characters that readers can interact with.',
-        image: require('../assets/images/onboarding-2.png'),
+        title: 'Create Your\nUniverse',
+        subtitle: 'Authors craft rich worlds with AI-powered characters. Give your creations voice, memory, and authentic personality.',
+        ornament: '*',
     },
     {
         id: '3',
-        title: 'CHAT WITH CHARACTERS',
-        subtitle: 'Don\'t just read the story. Talk to the protagonist and shape the narrative.',
-        image: require('../assets/images/onboarding-3.png'),
+        title: 'Converse with\nCharacters',
+        subtitle: 'Step beyond the page. Your favorite protagonists await, ready to share secrets only whispered in the margins.',
+        ornament: '&',
     },
 ];
 
+// Decorative floating element
+function FloatingOrnament({ delay = 0 }: { delay?: number }) {
+    const float = useSharedValue(0);
+
+    useEffect(() => {
+        float.value = withDelay(
+            delay,
+            withRepeat(
+                withSequence(
+                    withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1,
+                false
+            )
+        );
+    }, []);
+
+    const animStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: interpolate(float.value, [0, 1], [0, -12]) }],
+        opacity: interpolate(float.value, [0, 0.5, 1], [0.3, 0.6, 0.3]),
+    }));
+
+    return (
+        <Animated.View style={[styles.floatingOrnament, animStyle]}>
+            <Text style={styles.floatingOrnamentText}>~</Text>
+        </Animated.View>
+    );
+}
+
+// Animated pagination dot
+function PaginationDot({ active, index }: { active: boolean; index: number }) {
+    const width = useSharedValue(active ? 32 : 8);
+    const opacity = useSharedValue(active ? 1 : 0.4);
+
+    useEffect(() => {
+        width.value = withTiming(active ? 32 : 8, { duration: 300 });
+        opacity.value = withTiming(active ? 1 : 0.4, { duration: 300 });
+    }, [active]);
+
+    const animStyle = useAnimatedStyle(() => ({
+        width: width.value,
+        opacity: opacity.value,
+    }));
+
+    return (
+        <Animated.View style={[styles.paginationDot, animStyle]} />
+    );
+}
+
 export default function WelcomeScreen() {
     const [currentIndex, setCurrentIndex] = useState(0);
-    const scrollX = useSharedValue(0);
     const flatListRef = useRef<FlatList>(null);
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
     const isDesktop = width > 768;
 
     const { user, loading } = useAuth();
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (!loading && user) {
             checkUserRole(user.uid);
         }
@@ -74,8 +145,7 @@ export default function WelcomeScreen() {
     };
 
     const onScroll = (event: any) => {
-        scrollX.value = event.nativeEvent.contentOffset.x;
-        const index = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
+        const index = Math.round(event.nativeEvent.contentOffset.x / width);
         setCurrentIndex(index);
     };
 
@@ -92,18 +162,41 @@ export default function WelcomeScreen() {
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" />
 
-            {/* Top Nav - Just logo, no logout for landing */}
-            <View style={[styles.nav, isDesktop && styles.navDesktop]}>
-                <Text style={styles.logo}>ARLEA</Text>
-                <View style={styles.navButtons}>
-                    <AnimatedButton variant="outline" onPress={() => router.push('/auth/sign-in')}>
-                        <Text style={styles.navButtonText}>LOG IN</Text>
-                    </AnimatedButton>
-                </View>
+            {/* Warm parchment background with subtle gradient */}
+            <LinearGradient
+                colors={[DesignTokens.colors.background, DesignTokens.colors.backgroundAlt, DesignTokens.colors.background]}
+                locations={[0, 0.5, 1]}
+                style={StyleSheet.absoluteFill}
+            />
+
+            {/* Decorative floating elements */}
+            <View style={styles.floatingContainer}>
+                <FloatingOrnament delay={0} />
+                <FloatingOrnament delay={1000} />
+                <FloatingOrnament delay={2000} />
             </View>
 
+            {/* Navigation Header */}
+            <Animated.View
+                entering={FadeInDown.duration(600).delay(200)}
+                style={[styles.nav, isDesktop && styles.navDesktop]}
+            >
+                <View style={styles.logoContainer}>
+                    <Text style={styles.logoAccent}>~</Text>
+                    <Text style={styles.logo}>Arlea</Text>
+                    <Text style={styles.logoAccent}>~</Text>
+                </View>
+
+                <Pressable
+                    onPress={() => router.push('/auth/sign-in')}
+                    style={styles.navLink}
+                >
+                    <Text style={styles.navLinkText}>Sign In</Text>
+                </Pressable>
+            </Animated.View>
+
             {/* Hero Carousel */}
-            <Animated.FlatList
+            <FlatList
                 ref={flatListRef}
                 data={SLIDES}
                 keyExtractor={(item) => item.id}
@@ -112,39 +205,55 @@ export default function WelcomeScreen() {
                 showsHorizontalScrollIndicator={false}
                 onScroll={onScroll}
                 scrollEventThrottle={16}
-                renderItem={({ item }) => (
-                    <View style={[styles.slide, { width: screenWidth }]}>
-                        <Animated.Image
-                            source={item.image}
-                            style={[styles.image, isDesktop && styles.imageDesktop]}
-                            resizeMode="contain"
-                        />
-                        <Text style={[styles.title, isDesktop && styles.titleDesktop]}>
+                renderItem={({ item, index }) => (
+                    <View style={[styles.slide, { width }]}>
+                        {/* Large decorative ornament */}
+                        <Animated.Text
+                            entering={FadeIn.duration(800).delay(400)}
+                            style={styles.ornament}
+                        >
+                            {item.ornament}
+                        </Animated.Text>
+
+                        {/* Title */}
+                        <Animated.Text
+                            entering={FadeInUp.duration(700).delay(300)}
+                            style={[styles.title, isDesktop && styles.titleDesktop]}
+                        >
                             {item.title}
-                        </Text>
-                        <Text style={[styles.subtitle, isDesktop && styles.subtitleDesktop]}>
+                        </Animated.Text>
+
+                        {/* Decorative gold line */}
+                        <Animated.View
+                            entering={FadeIn.duration(600).delay(500)}
+                            style={styles.goldLine}
+                        />
+
+                        {/* Subtitle */}
+                        <Animated.Text
+                            entering={FadeInUp.duration(700).delay(500)}
+                            style={[styles.subtitle, isDesktop && styles.subtitleDesktop]}
+                        >
                             {item.subtitle}
-                        </Text>
+                        </Animated.Text>
                     </View>
                 )}
             />
 
             {/* Footer */}
-            <View style={[styles.footer, isDesktop && styles.footerDesktop]}>
-                {/* Pagination Dots - Brutalist style */}
+            <Animated.View
+                entering={FadeInUp.duration(600).delay(600)}
+                style={[styles.footer, isDesktop && styles.footerDesktop]}
+            >
+                {/* Elegant pagination */}
                 <View style={styles.pagination}>
-                    {SLIDES.map((_, index) => {
-                        const isActive = index === currentIndex;
-                        return (
-                            <View
-                                key={index}
-                                style={[
-                                    styles.dot,
-                                    isActive && styles.dotActive
-                                ]}
-                            />
-                        );
-                    })}
+                    {SLIDES.map((_, index) => (
+                        <PaginationDot
+                            key={index}
+                            active={index === currentIndex}
+                            index={index}
+                        />
+                    ))}
                 </View>
 
                 {/* CTA Buttons */}
@@ -152,27 +261,32 @@ export default function WelcomeScreen() {
                     <AnimatedButton
                         variant="primary"
                         onPress={() => router.push('/auth/sign-up')}
-                        style={styles.ctaButton}
+                        size="lg"
+                        style={styles.primaryButton}
                     >
-                        <Text style={styles.ctaButtonTextLight}>JOIN FOR FREE</Text>
-                        <Text style={styles.ctaArrowLight}>→</Text>
+                        <Text style={styles.primaryButtonText}>Begin Your Journey</Text>
                     </AnimatedButton>
 
                     <AnimatedButton
                         variant="secondary"
                         onPress={() => router.push('/auth/sign-in')}
-                        style={styles.ctaButton}
+                        size="lg"
+                        style={styles.secondaryButton}
                     >
-                        <Text style={styles.ctaButtonTextDark}>LOG IN</Text>
-                        <Text style={styles.ctaArrowDark}>→</Text>
+                        <Text style={styles.secondaryButtonText}>Welcome Back</Text>
                     </AnimatedButton>
                 </View>
 
-                {/* Dev Reset - Subtle */}
-                <AnimatedButton variant="outline" onPress={handleDevReset} style={styles.devButton}>
-                    <Text style={styles.devButtonText}>DEV: RESET</Text>
-                </AnimatedButton>
-            </View>
+                {/* Tagline */}
+                <Text style={styles.tagline}>
+                    Where every page turns into a conversation
+                </Text>
+
+                {/* Dev Reset - Very subtle */}
+                <Pressable onPress={handleDevReset} style={styles.devButton}>
+                    <Text style={styles.devButtonText}>Reset Session</Text>
+                </Pressable>
+            </Animated.View>
         </View>
     );
 }
@@ -182,143 +296,184 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: DesignTokens.colors.background,
     },
+
+    // Floating decorations
+    floatingContainer: {
+        ...StyleSheet.absoluteFillObject,
+        pointerEvents: 'none',
+    },
+    floatingOrnament: {
+        position: 'absolute',
+        right: '15%',
+        top: '20%',
+    },
+    floatingOrnamentText: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 120,
+        color: DesignTokens.colors.accentLight,
+    },
+
+    // Navigation
     nav: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: DesignTokens.borders.regular,
-        borderBottomColor: DesignTokens.colors.border,
+        paddingHorizontal: 24,
+        paddingVertical: 20,
+        paddingTop: 48,
     },
     navDesktop: {
-        paddingHorizontal: 40,
-        paddingVertical: 20,
+        paddingHorizontal: 64,
+        paddingVertical: 28,
+    },
+    logoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
     logo: {
-        fontFamily: 'Outfit_700Bold',
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 28,
+        color: DesignTokens.colors.text,
+        letterSpacing: 1,
+    },
+    logoAccent: {
+        fontFamily: 'PlayfairDisplay-Italic',
         fontSize: 24,
-        color: DesignTokens.colors.text,
-        letterSpacing: 3,
+        color: DesignTokens.colors.accent,
     },
-    navButtons: {
-        flexDirection: 'row',
-        gap: 12,
+    navLink: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
     },
-    navButtonText: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 12,
-        color: DesignTokens.colors.text,
-        letterSpacing: 0.5,
+    navLinkText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 14,
+        color: DesignTokens.colors.textSecondary,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
     },
+
+    // Slides
     slide: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingBottom: 20,
+        paddingHorizontal: 32,
     },
-    image: {
-        width: '80%',
-        maxWidth: 280,
-        height: 180,
-        marginBottom: 24,
-    },
-    imageDesktop: {
-        height: 240,
-        maxWidth: 320,
+    ornament: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 160,
+        color: DesignTokens.colors.accent,
+        opacity: 0.15,
+        position: 'absolute',
+        top: -40,
     },
     title: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 24,
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 42,
         color: DesignTokens.colors.text,
-        marginBottom: 12,
-        letterSpacing: 1,
-        lineHeight: 32,
         textAlign: 'center',
+        lineHeight: 52,
+        letterSpacing: -0.5,
     },
     titleDesktop: {
-        fontSize: 36,
-        lineHeight: 44,
-        letterSpacing: 2,
+        fontSize: 64,
+        lineHeight: 76,
+    },
+    goldLine: {
+        width: 60,
+        height: 2,
+        backgroundColor: DesignTokens.colors.accent,
+        marginVertical: 24,
+        borderRadius: 1,
     },
     subtitle: {
-        fontFamily: 'Outfit_400Regular',
-        fontSize: 14,
-        color: DesignTokens.colors.textLight,
-        lineHeight: 22,
+        fontFamily: 'Lora',
+        fontSize: 17,
+        color: DesignTokens.colors.textSecondary,
         textAlign: 'center',
-        maxWidth: 320,
-        paddingHorizontal: 10,
+        lineHeight: 28,
+        maxWidth: 340,
     },
     subtitleDesktop: {
-        fontSize: 16,
-        maxWidth: 400,
+        fontSize: 20,
+        lineHeight: 34,
+        maxWidth: 480,
     },
+
+    // Footer
     footer: {
         paddingHorizontal: 24,
         paddingBottom: 40,
         alignItems: 'center',
     },
     footerDesktop: {
-        paddingBottom: 60,
+        paddingBottom: 64,
     },
+
+    // Pagination
     pagination: {
         flexDirection: 'row',
-        marginBottom: 24,
-        gap: 12,
+        gap: 8,
+        marginBottom: 32,
     },
-    dot: {
-        width: 12,
-        height: 12,
-        backgroundColor: DesignTokens.colors.background,
-        borderWidth: 2,
-        borderColor: DesignTokens.colors.border,
+    paginationDot: {
+        height: 4,
+        backgroundColor: DesignTokens.colors.accent,
+        borderRadius: 2,
     },
-    dotActive: {
-        backgroundColor: DesignTokens.colors.primary,
-        borderColor: DesignTokens.colors.primary,
-    },
+
+    // Buttons
     buttonContainer: {
         width: '100%',
-        gap: 16,
-        maxWidth: 400,
+        gap: 14,
+        maxWidth: 360,
     },
     buttonContainerDesktop: {
         flexDirection: 'row',
         maxWidth: 500,
-        justifyContent: 'center',
+        gap: 20,
     },
-    ctaButton: {
+    primaryButton: {
         flex: 1,
     },
-    ctaButtonTextLight: {
-        fontFamily: 'Outfit_700Bold',
+    primaryButtonText: {
+        fontFamily: 'Raleway-SemiBold',
         fontSize: 14,
-        color: DesignTokens.colors.textOnPrimary,
-        letterSpacing: 0.5,
+        color: DesignTokens.colors.textOnAccent,
+        letterSpacing: 1.5,
+        textTransform: 'uppercase',
     },
-    ctaArrowLight: {
-        fontSize: 18,
-        color: DesignTokens.colors.textOnPrimary,
+    secondaryButton: {
+        flex: 1,
     },
-    ctaButtonTextDark: {
-        fontFamily: 'Outfit_700Bold',
+    secondaryButtonText: {
+        fontFamily: 'Raleway-SemiBold',
         fontSize: 14,
         color: DesignTokens.colors.text,
-        letterSpacing: 0.5,
+        letterSpacing: 1.5,
+        textTransform: 'uppercase',
     },
-    ctaArrowDark: {
-        fontSize: 18,
-        color: DesignTokens.colors.text,
+
+    // Tagline
+    tagline: {
+        fontFamily: 'Lora-Italic',
+        fontSize: 14,
+        color: DesignTokens.colors.textMuted,
+        marginTop: 28,
+        textAlign: 'center',
     },
+
+    // Dev
     devButton: {
-        marginTop: 24,
+        marginTop: 20,
+        padding: 8,
     },
     devButtonText: {
-        fontFamily: 'Outfit_500Medium',
-        fontSize: 10,
-        color: DesignTokens.colors.textLight,
-        letterSpacing: 0.5,
+        fontFamily: 'Raleway',
+        fontSize: 11,
+        color: DesignTokens.colors.textMuted,
+        opacity: 0.5,
     },
 });

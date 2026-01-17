@@ -1,14 +1,27 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { collection, deleteDoc, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import {
+    ActivityIndicator,
+    Alert,
+    Modal,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    useWindowDimensions,
+} from 'react-native';
+import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../../../components/AnimatedButton';
 import { ClarityBadge, ClarityModal } from '../../../components/CharacterClarity';
 import { EvalReportCard, EvalResult } from '../../../components/EvalReportCard';
-import { TopNav } from '../../../components/TopNav';
 import { DesignTokens } from '../../../constants/DesignSystem';
 import { auth, db, functions } from '../../../firebaseConfig';
 
@@ -36,7 +49,6 @@ export default function AuthorDashboard() {
     const [showClarityModal, setShowClarityModal] = useState(false);
     const [clarityCharacter, setClarityCharacter] = useState<any>(null);
 
-    // Eval modal state
     const [showEvalModal, setShowEvalModal] = useState(false);
     const [evalCharacter, setEvalCharacter] = useState<any>(null);
     const [evalLoading, setEvalLoading] = useState(false);
@@ -92,19 +104,6 @@ export default function AuthorDashboard() {
         router.replace('/');
     };
 
-    const handleDeleteAllBooks = async () => {
-        if (!auth.currentUser) return;
-        if (!(await confirm(`Delete ALL ${books.length} books?`))) return;
-        setDeleting(true);
-        try {
-            for (const char of characters) await deleteDoc(doc(db, "characters", char.id));
-            for (const book of books) await deleteDoc(doc(db, "books", book.id));
-        } catch (e: any) {
-            showAlert("Error", e.message);
-        }
-        setDeleting(false);
-    };
-
     const handleDeleteBook = async (bookId: string, title: string) => {
         if (!(await confirm(`Delete "${title}" and all its characters?`))) return;
         setDeleting(true);
@@ -149,16 +148,15 @@ export default function AuthorDashboard() {
                 await importCharacter({ bookId: importBookId, characterData: char });
                 successCount++;
             }
-            setImportResult(`✅ Imported ${successCount} character(s)`);
+            setImportResult(`Imported ${successCount} character(s) successfully`);
             setImportJson('');
         } catch (e: any) {
-            setImportResult(`❌ Error: ${e.message}`);
+            setImportResult(`Error: ${e.message}`);
         }
         setImporting(false);
     };
 
     const openPublishModal = (bookId: string, title: string) => {
-        // Check if all characters have passed eval
         const bookChars = characters.filter(c => c.bookId === bookId);
 
         if (bookChars.length === 0) {
@@ -172,8 +170,8 @@ export default function AuthorDashboard() {
 
         if (unevaluatedChars.length > 0) {
             showAlert(
-                "Eval Required",
-                `${unevaluatedChars.length} character(s) haven't been evaluated yet:\n\n${unevaluatedChars.map(c => `• ${c.name}`).join('\n')}\n\nRun eval on all characters before publishing.`
+                "Evaluation Required",
+                `${unevaluatedChars.length} character(s) haven't been evaluated yet. Run evaluation on all characters before publishing.`
             );
             return;
         }
@@ -182,12 +180,11 @@ export default function AuthorDashboard() {
             const problematicChars = [...new Set([...failedChars, ...lowScoreChars])];
             showAlert(
                 "Improve Characters",
-                `${problematicChars.length} character(s) scored below 28:\n\n${problematicChars.map(c => `• ${c.name} (${c.lastEvalScore || 'N/A'}/35)`).join('\n')}\n\nAll characters need 28+ to publish.`
+                `${problematicChars.length} character(s) scored below 28. All characters need 28+ to publish.`
             );
             return;
         }
 
-        // All checks passed - open publish modal
         setPublishBookId(bookId);
         setPublishBookTitle(title);
         setTermsAccepted(false);
@@ -224,7 +221,6 @@ export default function AuthorDashboard() {
         }
     };
 
-    // Eval functions
     const openEvalModal = (character: any) => {
         setEvalCharacter(character);
         setEvalResult(null);
@@ -237,12 +233,10 @@ export default function AuthorDashboard() {
         setEvalResult(null);
 
         try {
-            // Step 1: Generate questions
             const generateQuestions = httpsCallable(functions, 'generateEvalQuestions');
             const questionsResult = await generateQuestions({ characterId: evalCharacter.id });
             const questions = (questionsResult.data as any).questions;
 
-            // Step 2: Run conversation
             const runConversation = httpsCallable(functions, 'runEvalConversation');
             const conversationResult = await runConversation({
                 characterId: evalCharacter.id,
@@ -250,7 +244,6 @@ export default function AuthorDashboard() {
             });
             const qaPairs = (conversationResult.data as any).qaPairs;
 
-            // Step 3: Score responses
             const scoreResponses = httpsCallable(functions, 'scoreEvalResponses');
             const scoreResult = await scoreResponses({
                 characterId: evalCharacter.id,
@@ -259,67 +252,110 @@ export default function AuthorDashboard() {
 
             setEvalResult(scoreResult.data as EvalResult);
 
-            // Update local character state with eval status
             setCharacters(prev => prev.map(c =>
                 c.id === evalCharacter.id
                     ? { ...c, evalStatus: (scoreResult.data as EvalResult).passed ? 'passed' : 'failed', lastEvalScore: (scoreResult.data as EvalResult).totalScore }
                     : c
             ));
         } catch (error: any) {
-            showAlert("Eval Error", error.message || "Failed to run evaluation");
+            showAlert("Evaluation Error", error.message || "Failed to run evaluation");
         }
 
         setEvalLoading(false);
     };
 
-    // Mode switch button for TopNav
-    const modeSwitchButton = (
-        <AnimatedButton variant="outline" onPress={() => router.push('/dashboard/reader')}>
-            <Text style={styles.topNavButtonText}>READER</Text>
-        </AnimatedButton>
-    );
-
     return (
         <SafeAreaView style={styles.container}>
-            {/* TopNav with mode switch next to logout */}
-            <TopNav showLogout onLogout={handleLogout} rightContent={modeSwitchButton} />
+            {/* Background */}
+            <LinearGradient
+                colors={[DesignTokens.colors.background, DesignTokens.colors.backgroundAlt]}
+                style={StyleSheet.absoluteFill}
+            />
 
-            {/* Page Title */}
-            <View style={styles.pageHeader}>
-                <Text style={styles.pageTitle}>Author Dashboard</Text>
-            </View>
+            {/* Header */}
+            <Animated.View entering={FadeInDown.duration(500)} style={styles.header}>
+                <View style={styles.headerLeft}>
+                    <View style={styles.logoContainer}>
+                        <Text style={styles.logoAccent}>~</Text>
+                        <Text style={styles.logo}>Arlea</Text>
+                        <Text style={styles.logoAccent}>~</Text>
+                    </View>
+                    <View style={styles.roleBadge}>
+                        <Text style={styles.roleBadgeText}>Author</Text>
+                    </View>
+                </View>
 
-            {/* Deleting Overlay */}
+                <View style={styles.headerRight}>
+                    <Pressable
+                        onPress={() => router.push('/dashboard/reader')}
+                        style={styles.switchModeBtn}
+                    >
+                        <Text style={styles.switchModeText}>Reader Mode</Text>
+                    </Pressable>
+                    <Pressable onPress={handleLogout} style={styles.logoutBtn}>
+                        <Text style={styles.logoutText}>Sign Out</Text>
+                    </Pressable>
+                </View>
+            </Animated.View>
+
+            {/* Processing Overlay */}
             {deleting && (
                 <View style={styles.overlay}>
                     <View style={styles.overlayBox}>
-                        <ActivityIndicator size="large" color={DesignTokens.colors.primary} />
+                        <Text style={styles.overlayOrnament}>~</Text>
+                        <ActivityIndicator size="large" color={DesignTokens.colors.accent} />
                         <Text style={styles.overlayText}>Processing...</Text>
                     </View>
                 </View>
             )}
 
-            <ScrollView contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}>
+            {/* Title Section */}
+            <Animated.View entering={FadeInUp.duration(500).delay(100)} style={styles.titleSection}>
+                <Text style={styles.welcomeText}>Your creative space</Text>
+                <Text style={[styles.pageTitle, isDesktop && styles.pageTitleDesktop]}>
+                    Author Studio
+                </Text>
+                <View style={styles.titleGoldLine} />
+            </Animated.View>
+
+            <ScrollView
+                contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
+                showsVerticalScrollIndicator={false}
+            >
                 {loading ? (
                     <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="large" color={DesignTokens.colors.primary} />
+                        <Text style={styles.loadingOrnament}>~</Text>
+                        <ActivityIndicator size="large" color={DesignTokens.colors.accent} />
+                        <Text style={styles.loadingText}>Loading your books...</Text>
                     </View>
                 ) : books.length === 0 ? (
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyText}>You haven't created any books yet.</Text>
-                        <AnimatedButton variant="primary" onPress={() => router.push('/onboarding/author/book-info')}>
-                            <Text style={styles.emptyButtonText}>CREATE YOUR FIRST BOOK</Text>
-                            <Text style={styles.emptyButtonArrow}>→</Text>
+                    <Animated.View entering={FadeIn.duration(500)} style={styles.emptyState}>
+                        <Text style={styles.emptyOrnament}>"</Text>
+                        <Text style={styles.emptyTitle}>Begin Your First Story</Text>
+                        <Text style={styles.emptyText}>
+                            Create a book and bring your characters to life with AI-powered conversations.
+                        </Text>
+                        <AnimatedButton
+                            variant="primary"
+                            size="lg"
+                            onPress={() => router.push('/onboarding/author/book-info')}
+                            style={styles.emptyButton}
+                        >
+                            <Text style={styles.emptyButtonText}>Create Your First Book</Text>
                         </AnimatedButton>
-                    </View>
+                    </Animated.View>
                 ) : (
                     <View style={styles.booksContainer}>
-                        {books.map((book) => {
+                        {books.map((book, index) => {
                             const bookChars = characters.filter(c => c.bookId === book.id);
                             const isDraft = book.status !== 'published';
 
                             return (
-                                <View key={book.id} style={styles.bookCard}>
+                                <Animated.View
+                                    key={book.id}
+                                    entering={FadeIn.duration(400).delay(index * 100)}
+                                    style={styles.bookCard}
+                                >
                                     {/* Book Header */}
                                     <View style={styles.bookHeader}>
                                         <View style={styles.bookTitleRow}>
@@ -330,7 +366,14 @@ export default function AuthorDashboard() {
                                                 </Text>
                                             </View>
                                         </View>
-                                        <Text style={styles.bookMeta}>{book.genre} • {bookChars.length} Characters</Text>
+                                        <View style={styles.bookMeta}>
+                                            <View style={styles.genreBadge}>
+                                                <Text style={styles.genreText}>{book.genre}</Text>
+                                            </View>
+                                            <Text style={styles.characterCount}>
+                                                {bookChars.length} character{bookChars.length !== 1 ? 's' : ''}
+                                            </Text>
+                                        </View>
                                     </View>
 
                                     {/* Characters */}
@@ -340,20 +383,30 @@ export default function AuthorDashboard() {
                                                 {bookChars.map(char => (
                                                     <View key={char.id} style={styles.characterItem}>
                                                         <View style={styles.characterAvatar}>
-                                                            <Text style={styles.characterAvatarText}>{char.name?.[0]}</Text>
+                                                            <Text style={styles.characterAvatarText}>
+                                                                {char.name?.[0]?.toUpperCase()}
+                                                            </Text>
                                                         </View>
                                                         <View style={styles.characterInfo}>
                                                             <Text style={styles.characterName}>{char.name}</Text>
                                                             <Text style={styles.characterRole}>{char.role}</Text>
                                                         </View>
-                                                        <TouchableOpacity
+                                                        <Pressable
                                                             onPress={() => openEvalModal(char)}
-                                                            style={styles.evalButton}
+                                                            style={[
+                                                                styles.evalButton,
+                                                                char.evalStatus === 'passed' && styles.evalButtonPassed,
+                                                                char.evalStatus === 'failed' && styles.evalButtonFailed,
+                                                            ]}
                                                         >
-                                                            <Text style={styles.evalButtonText}>
-                                                                {char.evalStatus === 'passed' ? '✓ Eval' : char.evalStatus === 'failed' ? '✗ Eval' : 'Eval'}
+                                                            <Text style={[
+                                                                styles.evalButtonText,
+                                                                char.evalStatus === 'passed' && styles.evalButtonTextPassed,
+                                                                char.evalStatus === 'failed' && styles.evalButtonTextFailed,
+                                                            ]}>
+                                                                {char.evalStatus === 'passed' ? 'Passed' : char.evalStatus === 'failed' ? 'Failed' : 'Evaluate'}
                                                             </Text>
-                                                        </TouchableOpacity>
+                                                        </Pressable>
                                                         <ClarityBadge
                                                             character={char}
                                                             onPress={() => {
@@ -365,72 +418,109 @@ export default function AuthorDashboard() {
                                                 ))}
                                             </View>
                                         ) : (
-                                            <Text style={styles.noCharacters}>No characters yet</Text>
+                                            <Text style={styles.noCharacters}>No characters yet. Add one to get started.</Text>
                                         )}
 
                                         {/* Actions */}
                                         <View style={styles.actionsRow}>
-                                            <TouchableOpacity onPress={() => router.push({ pathname: '/onboarding/author/create-character', params: { bookId: book.id } })}>
-                                                <Text style={styles.actionLink}>+ Add Character</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity onPress={() => openImportModal(book.id)}>
-                                                <Text style={[styles.actionLink, { color: '#6366f1' }]}>Import</Text>
-                                            </TouchableOpacity>
+                                            <Pressable
+                                                style={styles.actionButton}
+                                                onPress={() => router.push({ pathname: '/onboarding/author/create-character', params: { bookId: book.id } })}
+                                            >
+                                                <Text style={styles.actionButtonText}>Add Character</Text>
+                                            </Pressable>
+                                            <Pressable
+                                                style={styles.actionButton}
+                                                onPress={() => openImportModal(book.id)}
+                                            >
+                                                <Text style={styles.actionButtonText}>Import</Text>
+                                            </Pressable>
                                             {bookChars.length > 0 && (
-                                                <TouchableOpacity onPress={() => handleDeleteAllCharacters(book.id, book.title)}>
-                                                    <Text style={[styles.actionLink, { color: '#ef4444' }]}>Clear All</Text>
-                                                </TouchableOpacity>
+                                                <Pressable
+                                                    style={[styles.actionButton, styles.actionButtonDanger]}
+                                                    onPress={() => handleDeleteAllCharacters(book.id, book.title)}
+                                                >
+                                                    <Text style={styles.actionButtonTextDanger}>Clear All</Text>
+                                                </Pressable>
                                             )}
+                                        </View>
+
+                                        <View style={styles.bookActionsRow}>
                                             {isDraft ? (
-                                                <TouchableOpacity onPress={() => openPublishModal(book.id, book.title)}>
-                                                    <Text style={[styles.actionLink, { color: '#22c55e' }]}>🚀 Publish</Text>
-                                                </TouchableOpacity>
+                                                <Pressable
+                                                    style={styles.publishButton}
+                                                    onPress={() => openPublishModal(book.id, book.title)}
+                                                >
+                                                    <Text style={styles.publishButtonText}>Publish Book</Text>
+                                                </Pressable>
                                             ) : (
-                                                <TouchableOpacity onPress={() => handleUnpublish(book.id)}>
-                                                    <Text style={[styles.actionLink, { color: '#f59e0b' }]}>Unpublish</Text>
-                                                </TouchableOpacity>
+                                                <Pressable
+                                                    style={styles.unpublishButton}
+                                                    onPress={() => handleUnpublish(book.id)}
+                                                >
+                                                    <Text style={styles.unpublishButtonText}>Unpublish</Text>
+                                                </Pressable>
                                             )}
-                                            <TouchableOpacity onPress={() => handleDeleteBook(book.id, book.title)}>
-                                                <Text style={[styles.actionLink, { color: '#ef4444' }]}>Delete Book</Text>
-                                            </TouchableOpacity>
+                                            <Pressable
+                                                style={styles.deleteButton}
+                                                onPress={() => handleDeleteBook(book.id, book.title)}
+                                            >
+                                                <Text style={styles.deleteButtonText}>Delete Book</Text>
+                                            </Pressable>
                                         </View>
                                     </View>
-                                </View>
+                                </Animated.View>
                             );
                         })}
                     </View>
                 )}
             </ScrollView>
 
+            {/* FAB */}
+            {!loading && books.length > 0 && (
+                <Pressable
+                    style={styles.fab}
+                    onPress={() => router.push('/onboarding/author/book-info')}
+                >
+                    <Text style={styles.fabText}>+</Text>
+                </Pressable>
+            )}
+
             {/* Import Modal */}
             <Modal visible={showImportModal} animationType="fade" transparent>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Import Characters</Text>
+                        <Text style={styles.modalDescription}>
+                            Paste your character JSON below to import.
+                        </Text>
                         <TextInput
                             style={styles.importInput}
                             placeholder="Paste JSON here..."
-                            placeholderTextColor="#999"
+                            placeholderTextColor={DesignTokens.colors.textMuted}
                             value={importJson}
                             onChangeText={setImportJson}
                             multiline
                         />
                         {importResult && (
-                            <View style={[styles.importResult, importResult.includes('✅') ? styles.importSuccess : styles.importError]}>
+                            <View style={[
+                                styles.importResult,
+                                importResult.includes('success') ? styles.importSuccess : styles.importError
+                            ]}>
                                 <Text style={styles.importResultText}>{importResult}</Text>
                             </View>
                         )}
                         <View style={styles.modalActions}>
-                            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowImportModal(false)}>
+                            <Pressable style={styles.modalCancelBtn} onPress={() => setShowImportModal(false)}>
                                 <Text style={styles.modalCancelText}>Cancel</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.modalPrimaryBtn} onPress={handleImport}>
+                            </Pressable>
+                            <Pressable style={styles.modalPrimaryBtn} onPress={handleImport}>
                                 {importing ? (
-                                    <ActivityIndicator color="white" size="small" />
+                                    <ActivityIndicator color={DesignTokens.colors.textOnAccent} size="small" />
                                 ) : (
                                     <Text style={styles.modalPrimaryText}>Import</Text>
                                 )}
-                            </TouchableOpacity>
+                            </Pressable>
                         </View>
                     </View>
                 </View>
@@ -442,54 +532,49 @@ export default function AuthorDashboard() {
                     <View style={styles.modalContent}>
                         {publishSuccess ? (
                             <View style={styles.publishSuccess}>
-                                <Text style={styles.publishSuccessEmoji}>🎉</Text>
+                                <Text style={styles.publishSuccessOrnament}>~</Text>
                                 <Text style={styles.publishSuccessTitle}>Published!</Text>
-                                <Text style={styles.publishSuccessText}>Your book is now visible to all readers.</Text>
+                                <Text style={styles.publishSuccessText}>
+                                    Your book is now available to all readers.
+                                </Text>
                             </View>
                         ) : (
                             <>
                                 <Text style={styles.modalTitle}>Publish "{publishBookTitle}"</Text>
-                                <Text style={styles.publishDescription}>
-                                    Making your book public means all readers can discover and chat with your characters.
+                                <Text style={styles.modalDescription}>
+                                    Once published, all readers will be able to discover and chat with your characters.
                                 </Text>
 
-                                <TouchableOpacity style={styles.termsRow} onPress={() => setTermsAccepted(!termsAccepted)}>
+                                <Pressable style={styles.termsRow} onPress={() => setTermsAccepted(!termsAccepted)}>
                                     <View style={[styles.checkbox, termsAccepted && styles.checkboxChecked]}>
-                                        {termsAccepted && <Text style={styles.checkmark}>✓</Text>}
+                                        {termsAccepted && <Text style={styles.checkmark}>~</Text>}
                                     </View>
                                     <Text style={styles.termsText}>
-                                        I confirm that I have the rights to publish this book.
+                                        I confirm that I have the rights to publish this content.
                                     </Text>
-                                </TouchableOpacity>
+                                </Pressable>
 
                                 <View style={styles.modalActions}>
-                                    <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowPublishModal(false)}>
+                                    <Pressable style={styles.modalCancelBtn} onPress={() => setShowPublishModal(false)}>
                                         <Text style={styles.modalCancelText}>Cancel</Text>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
+                                    </Pressable>
+                                    <Pressable
                                         style={[styles.modalPrimaryBtn, !termsAccepted && styles.modalPrimaryBtnDisabled]}
                                         onPress={handlePublish}
                                         disabled={!termsAccepted}
                                     >
                                         {publishing ? (
-                                            <ActivityIndicator color="white" size="small" />
+                                            <ActivityIndicator color={DesignTokens.colors.textOnAccent} size="small" />
                                         ) : (
                                             <Text style={styles.modalPrimaryText}>Publish</Text>
                                         )}
-                                    </TouchableOpacity>
+                                    </Pressable>
                                 </View>
                             </>
                         )}
                     </View>
                 </View>
             </Modal>
-
-            {/* FAB */}
-            {!loading && books.length > 0 && (
-                <TouchableOpacity style={styles.fab} onPress={() => router.push('/onboarding/author/book-info')}>
-                    <Text style={styles.fabText}>+</Text>
-                </TouchableOpacity>
-            )}
 
             <ClarityModal visible={showClarityModal} onClose={() => setShowClarityModal(false)} character={clarityCharacter} />
 
@@ -501,9 +586,9 @@ export default function AuthorDashboard() {
                             <Text style={styles.modalTitle}>
                                 Evaluate: {evalCharacter?.name}
                             </Text>
-                            <TouchableOpacity onPress={() => setShowEvalModal(false)}>
-                                <Text style={{ fontSize: 24, color: '#888' }}>×</Text>
-                            </TouchableOpacity>
+                            <Pressable onPress={() => setShowEvalModal(false)} style={styles.closeButton}>
+                                <Text style={styles.closeButtonText}>x</Text>
+                            </Pressable>
                         </View>
                         <ScrollView style={{ flex: 1 }}>
                             <EvalReportCard
@@ -512,7 +597,6 @@ export default function AuthorDashboard() {
                                 onRunEval={runEval}
                                 onPublish={() => {
                                     setShowEvalModal(false);
-                                    // Could trigger publish flow here
                                 }}
                             />
                         </ScrollView>
@@ -526,44 +610,132 @@ export default function AuthorDashboard() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: DesignTokens.colors.background,
     },
-    topNavButtonText: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 12,
-        color: DesignTokens.colors.text,
-        letterSpacing: 0.5,
-    },
-    pageHeader: {
+
+    // Header
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: 20,
-        paddingVertical: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        paddingVertical: 12,
     },
-    pageTitle: {
-        fontFamily: 'Outfit_700Bold',
+    headerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    logoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    logo: {
+        fontFamily: 'PlayfairDisplay-Bold',
         fontSize: 22,
-        color: DesignTokens.colors.primary,
+        color: DesignTokens.colors.text,
     },
+    logoAccent: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 18,
+        color: DesignTokens.colors.accent,
+    },
+    roleBadge: {
+        backgroundColor: DesignTokens.colors.primary,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: DesignTokens.radius.full,
+    },
+    roleBadgeText: {
+        fontFamily: 'Raleway-SemiBold',
+        fontSize: 11,
+        color: DesignTokens.colors.textOnDark,
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    switchModeBtn: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: DesignTokens.radius.md,
+        borderWidth: 1,
+        borderColor: DesignTokens.colors.border,
+    },
+    switchModeText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 12,
+        color: DesignTokens.colors.textSecondary,
+    },
+    logoutBtn: {
+        padding: 6,
+    },
+    logoutText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 12,
+        color: DesignTokens.colors.textMuted,
+    },
+
+    // Overlay
     overlay: {
-        position: 'absolute',
-        top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.3)',
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: DesignTokens.colors.overlay,
         zIndex: 100,
         justifyContent: 'center',
         alignItems: 'center',
     },
     overlayBox: {
-        backgroundColor: 'white',
-        padding: 24,
-        borderRadius: 12,
+        backgroundColor: DesignTokens.colors.surface,
+        padding: 32,
+        borderRadius: DesignTokens.radius.xl,
         alignItems: 'center',
+        ...DesignTokens.shadows.dramatic,
+    },
+    overlayOrnament: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 32,
+        color: DesignTokens.colors.accent,
+        marginBottom: 12,
     },
     overlayText: {
-        fontFamily: 'Outfit_500Medium',
+        fontFamily: 'Lora',
         marginTop: 12,
-        color: '#666',
+        color: DesignTokens.colors.textSecondary,
     },
+
+    // Title Section
+    titleSection: {
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 16,
+    },
+    welcomeText: {
+        fontFamily: 'Lora-Italic',
+        fontSize: 14,
+        color: DesignTokens.colors.textMuted,
+        marginBottom: 4,
+    },
+    pageTitle: {
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 32,
+        color: DesignTokens.colors.text,
+        marginBottom: 12,
+    },
+    pageTitleDesktop: {
+        fontSize: 40,
+    },
+    titleGoldLine: {
+        width: 50,
+        height: 2,
+        backgroundColor: DesignTokens.colors.accent,
+        borderRadius: 1,
+    },
+
+    // Content
     content: {
         padding: 20,
         paddingBottom: 100,
@@ -573,85 +745,140 @@ const styles = StyleSheet.create({
         alignSelf: 'center',
         width: '100%',
     },
+
+    // Loading
     loadingContainer: {
         alignItems: 'center',
-        marginTop: 60,
+        paddingTop: 60,
     },
+    loadingOrnament: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 40,
+        color: DesignTokens.colors.accent,
+        marginBottom: 16,
+    },
+    loadingText: {
+        fontFamily: 'Lora-Italic',
+        fontSize: 15,
+        color: DesignTokens.colors.textMuted,
+        marginTop: 16,
+    },
+
+    // Empty State
     emptyState: {
         alignItems: 'center',
-        marginTop: 60,
-        gap: 20,
+        paddingTop: 40,
+        paddingHorizontal: 20,
+    },
+    emptyOrnament: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 80,
+        color: DesignTokens.colors.accent,
+        opacity: 0.2,
+        marginBottom: 8,
+    },
+    emptyTitle: {
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 26,
+        color: DesignTokens.colors.text,
+        textAlign: 'center',
+        marginBottom: 12,
     },
     emptyText: {
-        fontFamily: 'Outfit_400Regular',
+        fontFamily: 'Lora',
         fontSize: 15,
-        color: '#888',
+        color: DesignTokens.colors.textSecondary,
+        textAlign: 'center',
+        lineHeight: 24,
+        maxWidth: 320,
+        marginBottom: 28,
     },
+    emptyButton: {},
     emptyButtonText: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 12,
-        color: DesignTokens.colors.textOnPrimary,
-        letterSpacing: 0.5,
+        fontFamily: 'Raleway-SemiBold',
+        fontSize: 14,
+        color: DesignTokens.colors.textOnAccent,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
     },
-    emptyButtonArrow: {
-        fontSize: 16,
-        color: DesignTokens.colors.textOnPrimary,
-    },
+
+    // Books
     booksContainer: {
-        gap: 20,
+        gap: 24,
     },
     bookCard: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#e5e5e5',
+        backgroundColor: DesignTokens.colors.surface,
+        borderRadius: DesignTokens.radius.xl,
         overflow: 'hidden',
+        ...DesignTokens.shadows.soft,
     },
     bookHeader: {
-        padding: 16,
-        backgroundColor: '#f9f9f9',
+        padding: 20,
         borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        borderBottomColor: DesignTokens.colors.divider,
     },
     bookTitleRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        marginBottom: 4,
+        justifyContent: 'space-between',
+        marginBottom: 10,
     },
     bookTitle: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 18,
-        color: DesignTokens.colors.primary,
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 20,
+        color: DesignTokens.colors.text,
+        flex: 1,
     },
     statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: DesignTokens.radius.full,
     },
     statusDraft: {
-        backgroundColor: '#fef3c7',
+        backgroundColor: DesignTokens.colors.accentLight,
     },
     statusPublished: {
-        backgroundColor: '#dcfce7',
+        backgroundColor: 'rgba(74, 124, 89, 0.15)',
     },
     statusText: {
-        fontFamily: 'Outfit_600SemiBold',
-        fontSize: 10,
+        fontFamily: 'Raleway-SemiBold',
+        fontSize: 11,
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
     },
     statusTextDraft: {
-        color: '#92400e',
+        color: DesignTokens.colors.accent,
     },
     statusTextPublished: {
-        color: '#166534',
+        color: DesignTokens.colors.success,
     },
     bookMeta: {
-        fontFamily: 'Outfit_400Regular',
-        fontSize: 13,
-        color: '#888',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
     },
+    genreBadge: {
+        backgroundColor: DesignTokens.colors.backgroundAlt,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: DesignTokens.radius.full,
+    },
+    genreText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 11,
+        color: DesignTokens.colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    characterCount: {
+        fontFamily: 'Lora',
+        fontSize: 13,
+        color: DesignTokens.colors.textMuted,
+    },
+
+    // Characters Section
     charactersSection: {
-        padding: 16,
+        padding: 20,
     },
     charactersList: {
         gap: 10,
@@ -659,231 +886,333 @@ const styles = StyleSheet.create({
     characterItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#f5f5f5',
-        padding: 12,
-        borderRadius: 10,
+        backgroundColor: DesignTokens.colors.backgroundAlt,
+        padding: 14,
+        borderRadius: DesignTokens.radius.lg,
     },
     characterAvatar: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: DesignTokens.colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
+        marginRight: 14,
     },
     characterAvatarText: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 14,
-        color: 'white',
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 16,
+        color: DesignTokens.colors.textOnDark,
     },
     characterInfo: {
         flex: 1,
     },
     characterName: {
-        fontFamily: 'Outfit_600SemiBold',
-        fontSize: 14,
-        color: '#333',
+        fontFamily: 'Lora-SemiBold',
+        fontSize: 15,
+        color: DesignTokens.colors.text,
     },
     characterRole: {
-        fontFamily: 'Outfit_400Regular',
+        fontFamily: 'Lora',
         fontSize: 12,
-        color: '#888',
+        color: DesignTokens.colors.textSecondary,
     },
     noCharacters: {
-        fontFamily: 'Outfit_400Regular',
-        fontSize: 13,
-        color: '#999',
-        fontStyle: 'italic',
+        fontFamily: 'Lora-Italic',
+        fontSize: 14,
+        color: DesignTokens.colors.textMuted,
+        textAlign: 'center',
+        paddingVertical: 20,
     },
+
+    // Eval Button
+    evalButton: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: DesignTokens.radius.md,
+        backgroundColor: DesignTokens.colors.border,
+        marginRight: 10,
+    },
+    evalButtonPassed: {
+        backgroundColor: 'rgba(74, 124, 89, 0.15)',
+    },
+    evalButtonFailed: {
+        backgroundColor: 'rgba(165, 74, 74, 0.15)',
+    },
+    evalButtonText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 11,
+        color: DesignTokens.colors.textSecondary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    evalButtonTextPassed: {
+        color: DesignTokens.colors.success,
+    },
+    evalButtonTextFailed: {
+        color: DesignTokens.colors.error,
+    },
+
+    // Actions
     actionsRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        marginTop: 14,
-        paddingTop: 10,
+        gap: 10,
+        marginTop: 16,
+        paddingTop: 16,
         borderTopWidth: 1,
-        borderTopColor: '#f0f0f0',
+        borderTopColor: DesignTokens.colors.divider,
     },
-    actionLink: {
-        fontFamily: 'Outfit_600SemiBold',
+    actionButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        borderRadius: DesignTokens.radius.md,
+        backgroundColor: DesignTokens.colors.backgroundAlt,
+    },
+    actionButtonDanger: {
+        backgroundColor: 'rgba(165, 74, 74, 0.1)',
+    },
+    actionButtonText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 12,
+        color: DesignTokens.colors.text,
+    },
+    actionButtonTextDanger: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 12,
+        color: DesignTokens.colors.error,
+    },
+    bookActionsRow: {
+        flexDirection: 'row',
+        gap: 10,
+        marginTop: 12,
+    },
+    publishButton: {
+        flex: 1,
+        paddingVertical: 12,
+        backgroundColor: DesignTokens.colors.accent,
+        borderRadius: DesignTokens.radius.md,
+        alignItems: 'center',
+    },
+    publishButtonText: {
+        fontFamily: 'Raleway-SemiBold',
         fontSize: 13,
-        color: DesignTokens.colors.primary,
-        marginRight: 16,
-        marginBottom: 8,
+        color: DesignTokens.colors.textOnAccent,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
+    unpublishButton: {
+        flex: 1,
+        paddingVertical: 12,
+        backgroundColor: DesignTokens.colors.backgroundAlt,
+        borderRadius: DesignTokens.radius.md,
+        alignItems: 'center',
+    },
+    unpublishButtonText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 13,
+        color: DesignTokens.colors.textSecondary,
+    },
+    deleteButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: DesignTokens.radius.md,
+        borderWidth: 1,
+        borderColor: DesignTokens.colors.error,
+    },
+    deleteButtonText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 13,
+        color: DesignTokens.colors.error,
+    },
+
+    // FAB
+    fab: {
+        position: 'absolute',
+        bottom: 30,
+        right: 20,
+        backgroundColor: DesignTokens.colors.accent,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        ...DesignTokens.shadows.glow,
+    },
+    fabText: {
+        fontFamily: 'PlayfairDisplay',
+        fontSize: 32,
+        color: DesignTokens.colors.textOnAccent,
+    },
+
+    // Modal
     modalOverlay: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: DesignTokens.colors.overlay,
         padding: 20,
     },
     modalContent: {
-        backgroundColor: 'white',
-        borderRadius: 16,
-        padding: 24,
+        backgroundColor: DesignTokens.colors.surface,
+        borderRadius: DesignTokens.radius.xl,
+        padding: 28,
         width: '100%',
-        maxWidth: 400,
+        maxWidth: 420,
+        ...DesignTokens.shadows.dramatic,
     },
     modalTitle: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 18,
-        color: DesignTokens.colors.primary,
-        marginBottom: 16,
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 22,
+        color: DesignTokens.colors.text,
+        marginBottom: 8,
+    },
+    modalDescription: {
+        fontFamily: 'Lora',
+        fontSize: 14,
+        color: DesignTokens.colors.textSecondary,
+        lineHeight: 22,
+        marginBottom: 20,
     },
     importInput: {
         borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 8,
-        padding: 12,
+        borderColor: DesignTokens.colors.border,
+        borderRadius: DesignTokens.radius.md,
+        padding: 14,
         minHeight: 120,
         fontFamily: 'SpaceMono',
-        fontSize: 11,
+        fontSize: 12,
+        color: DesignTokens.colors.text,
+        backgroundColor: DesignTokens.colors.backgroundAlt,
         textAlignVertical: 'top',
     },
     importResult: {
         marginTop: 12,
-        padding: 10,
-        borderRadius: 8,
-        textAlign: 'center',
+        padding: 12,
+        borderRadius: DesignTokens.radius.md,
     },
     importSuccess: {
-        backgroundColor: '#dcfce7',
+        backgroundColor: 'rgba(74, 124, 89, 0.15)',
     },
     importError: {
-        backgroundColor: '#fee2e2',
+        backgroundColor: 'rgba(165, 74, 74, 0.1)',
     },
     importResultText: {
-        fontFamily: 'Outfit_500Medium',
+        fontFamily: 'Lora',
         fontSize: 13,
         textAlign: 'center',
+        color: DesignTokens.colors.text,
     },
     modalActions: {
         flexDirection: 'row',
         justifyContent: 'flex-end',
         gap: 12,
-        marginTop: 20,
+        marginTop: 24,
     },
     modalCancelBtn: {
         paddingVertical: 12,
         paddingHorizontal: 20,
     },
     modalCancelText: {
-        fontFamily: 'Outfit_500Medium',
+        fontFamily: 'Raleway-Medium',
         fontSize: 14,
-        color: '#888',
+        color: DesignTokens.colors.textMuted,
     },
     modalPrimaryBtn: {
-        backgroundColor: DesignTokens.colors.primary,
+        backgroundColor: DesignTokens.colors.accent,
         paddingVertical: 12,
         paddingHorizontal: 24,
-        borderRadius: 8,
+        borderRadius: DesignTokens.radius.md,
     },
     modalPrimaryBtnDisabled: {
-        backgroundColor: '#ddd',
+        backgroundColor: DesignTokens.colors.border,
     },
     modalPrimaryText: {
-        fontFamily: 'Outfit_600SemiBold',
+        fontFamily: 'Raleway-SemiBold',
         fontSize: 14,
-        color: 'white',
+        color: DesignTokens.colors.textOnAccent,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
+
+    // Publish Success
     publishSuccess: {
         alignItems: 'center',
-        paddingVertical: 20,
+        paddingVertical: 24,
     },
-    publishSuccessEmoji: {
+    publishSuccessOrnament: {
+        fontFamily: 'PlayfairDisplay-Italic',
         fontSize: 48,
-        marginBottom: 12,
+        color: DesignTokens.colors.accent,
+        marginBottom: 16,
     },
     publishSuccessTitle: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 22,
-        color: DesignTokens.colors.primary,
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 26,
+        color: DesignTokens.colors.text,
         marginBottom: 8,
     },
     publishSuccessText: {
-        fontFamily: 'Outfit_400Regular',
-        fontSize: 14,
-        color: '#888',
+        fontFamily: 'Lora',
+        fontSize: 15,
+        color: DesignTokens.colors.textSecondary,
+        textAlign: 'center',
     },
-    publishDescription: {
-        fontFamily: 'Outfit_400Regular',
-        fontSize: 14,
-        color: '#666',
-        lineHeight: 20,
-        marginBottom: 20,
-    },
+
+    // Terms
     termsRow: {
         flexDirection: 'row',
         alignItems: 'flex-start',
-        gap: 12,
-        padding: 14,
-        backgroundColor: '#f5f5f5',
-        borderRadius: 10,
-        marginBottom: 20,
+        gap: 14,
+        padding: 16,
+        backgroundColor: DesignTokens.colors.backgroundAlt,
+        borderRadius: DesignTokens.radius.lg,
+        marginBottom: 8,
     },
     checkbox: {
-        width: 22,
-        height: 22,
+        width: 24,
+        height: 24,
         borderWidth: 2,
-        borderColor: '#ccc',
-        borderRadius: 4,
+        borderColor: DesignTokens.colors.border,
+        borderRadius: DesignTokens.radius.sm,
         justifyContent: 'center',
         alignItems: 'center',
     },
     checkboxChecked: {
-        backgroundColor: DesignTokens.colors.primary,
-        borderColor: DesignTokens.colors.primary,
+        backgroundColor: DesignTokens.colors.accent,
+        borderColor: DesignTokens.colors.accent,
     },
     checkmark: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: 'bold',
+        fontFamily: 'PlayfairDisplay-Italic',
+        color: DesignTokens.colors.textOnAccent,
+        fontSize: 16,
     },
     termsText: {
         flex: 1,
-        fontFamily: 'Outfit_400Regular',
-        fontSize: 13,
-        color: '#444',
-        lineHeight: 18,
+        fontFamily: 'Lora',
+        fontSize: 14,
+        color: DesignTokens.colors.textSecondary,
+        lineHeight: 20,
     },
-    fab: {
-        position: 'absolute',
-        bottom: 30,
-        right: 20,
-        backgroundColor: DesignTokens.colors.primary,
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-    },
-    fabText: {
-        fontSize: 28,
-        color: 'white',
-        fontWeight: 'bold',
-    },
-    evalButton: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 4,
-        backgroundColor: '#f0f0f0',
-        marginRight: 8,
-    },
-    evalButtonText: {
-        fontFamily: 'Outfit_500Medium',
-        fontSize: 11,
-        color: '#666',
-    },
+
+    // Eval Modal
     evalModalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 16,
+    },
+    closeButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: DesignTokens.colors.backgroundAlt,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    closeButtonText: {
+        fontFamily: 'Lora',
+        fontSize: 18,
+        color: DesignTokens.colors.textMuted,
     },
 });

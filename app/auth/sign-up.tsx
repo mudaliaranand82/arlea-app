@@ -1,14 +1,23 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import {
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    useWindowDimensions,
+} from 'react-native';
+import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnimatedButton } from '../../components/AnimatedButton';
-import { TopNav } from '../../components/TopNav';
 import { DesignTokens } from '../../constants/DesignSystem';
 
 import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { Alert } from 'react-native';
 import { auth, db } from '../../firebaseConfig';
 
 export default function SignUp() {
@@ -17,6 +26,7 @@ export default function SignUp() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [focusedField, setFocusedField] = useState<string | null>(null);
     const { width } = useWindowDimensions();
     const isDesktop = width > 768;
 
@@ -96,100 +106,166 @@ export default function SignUp() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <TopNav showLogout={false} />
+            {/* Warm gradient background */}
+            <LinearGradient
+                colors={[DesignTokens.colors.background, DesignTokens.colors.backgroundAlt]}
+                style={StyleSheet.absoluteFill}
+            />
+
+            {/* Header */}
+            <Animated.View
+                entering={FadeInDown.duration(500)}
+                style={styles.header}
+            >
+                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                    <Text style={styles.backArrow}>{'<'}</Text>
+                    <Text style={styles.backText}>Back</Text>
+                </Pressable>
+
+                <View style={styles.logoContainer}>
+                    <Text style={styles.logoAccent}>~</Text>
+                    <Text style={styles.logo}>Arlea</Text>
+                    <Text style={styles.logoAccent}>~</Text>
+                </View>
+
+                <View style={{ width: 60 }} />
+            </Animated.View>
 
             <ScrollView
                 contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             >
-                {/* Header */}
-                <View style={styles.header}>
-                    <Text style={[styles.title, isDesktop && styles.titleDesktop]}>CREATE ACCOUNT</Text>
-                    <Text style={styles.subtitle}>Join Arlea today</Text>
-                </View>
+                {/* Welcome Message */}
+                <Animated.View
+                    entering={FadeInUp.duration(600).delay(200)}
+                    style={styles.welcomeContainer}
+                >
+                    <Text style={styles.welcomeOrnament}>*</Text>
+                    <Text style={[styles.title, isDesktop && styles.titleDesktop]}>
+                        Begin Your Story
+                    </Text>
+                    <View style={styles.goldLine} />
+                    <Text style={styles.subtitle}>
+                        Create your account and step into a world of stories
+                    </Text>
+                </Animated.View>
 
                 {/* Error Banner */}
                 {error && (
-                    <View style={styles.errorBanner}>
+                    <Animated.View
+                        entering={FadeIn.duration(300)}
+                        style={styles.errorBanner}
+                    >
                         <Text style={styles.errorText}>{error}</Text>
-                    </View>
+                    </Animated.View>
                 )}
 
                 {/* Form Card */}
-                <View style={[styles.card, isDesktop && styles.cardDesktop]}>
-                    <Text style={styles.label}>EMAIL</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="hello@example.com"
-                        placeholderTextColor={DesignTokens.colors.textLight}
-                        value={email}
-                        onChangeText={setEmail}
-                        autoCapitalize="none"
-                        keyboardType="email-address"
-                    />
+                <Animated.View
+                    entering={FadeInUp.duration(600).delay(400)}
+                    style={[styles.card, isDesktop && styles.cardDesktop]}
+                >
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Email Address</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                focusedField === 'email' && styles.inputFocused
+                            ]}
+                            placeholder="you@example.com"
+                            placeholderTextColor={DesignTokens.colors.textMuted}
+                            value={email}
+                            onChangeText={setEmail}
+                            onFocus={() => setFocusedField('email')}
+                            onBlur={() => setFocusedField(null)}
+                            autoCapitalize="none"
+                            keyboardType="email-address"
+                        />
+                    </View>
 
-                    <Text style={styles.label}>PASSWORD</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="••••••••"
-                        placeholderTextColor={DesignTokens.colors.textLight}
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry
-                    />
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Password</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                focusedField === 'password' && styles.inputFocused
+                            ]}
+                            placeholder="Create a strong password"
+                            placeholderTextColor={DesignTokens.colors.textMuted}
+                            value={password}
+                            onChangeText={setPassword}
+                            onFocus={() => setFocusedField('password')}
+                            onBlur={() => setFocusedField(null)}
+                            secureTextEntry
+                        />
+                    </View>
 
-                    <Text style={styles.label}>CONFIRM PASSWORD</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="••••••••"
-                        placeholderTextColor={DesignTokens.colors.textLight}
-                        value={confirmPassword}
-                        onChangeText={setConfirmPassword}
-                        secureTextEntry
-                    />
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Confirm Password</Text>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                focusedField === 'confirm' && styles.inputFocused
+                            ]}
+                            placeholder="Confirm your password"
+                            placeholderTextColor={DesignTokens.colors.textMuted}
+                            value={confirmPassword}
+                            onChangeText={setConfirmPassword}
+                            onFocus={() => setFocusedField('confirm')}
+                            onBlur={() => setFocusedField(null)}
+                            secureTextEntry
+                        />
+                    </View>
 
                     <AnimatedButton
                         variant="primary"
                         onPress={handleSignUp}
+                        size="lg"
                         style={styles.submitButton}
+                        disabled={loading}
                     >
                         <Text style={styles.submitButtonText}>
-                            {loading ? "CREATING ACCOUNT..." : "SIGN UP"}
+                            {loading ? "Creating Account..." : "Create Account"}
                         </Text>
-                        <Text style={styles.submitButtonArrow}>→</Text>
                     </AnimatedButton>
 
                     {/* Divider */}
                     <View style={styles.divider}>
                         <View style={styles.dividerLine} />
-                        <Text style={styles.dividerText}>OR</Text>
+                        <Text style={styles.dividerText}>or continue with</Text>
                         <View style={styles.dividerLine} />
                     </View>
 
+                    {/* Social Login */}
                     <AnimatedButton
                         variant="secondary"
                         onPress={handleGoogleSignIn}
+                        size="lg"
+                        disabled={loading}
                     >
-                        <Text style={styles.googleButtonText}>CONTINUE WITH GOOGLE</Text>
+                        <Text style={styles.googleButtonText}>Google</Text>
                     </AnimatedButton>
-                </View>
+                </Animated.View>
+
+                {/* Terms */}
+                <Animated.Text
+                    entering={FadeIn.duration(400).delay(500)}
+                    style={styles.termsText}
+                >
+                    By creating an account, you agree to our Terms of Service and Privacy Policy
+                </Animated.Text>
 
                 {/* Footer */}
-                <View style={styles.footer}>
-                    <Text style={styles.footerText}>Already have an account? </Text>
-                    <AnimatedButton variant="outline" onPress={() => router.push('/auth/sign-in')}>
-                        <Text style={styles.footerLink}>SIGN IN</Text>
-                    </AnimatedButton>
-                </View>
-
-                <AnimatedButton
-                    variant="outline"
-                    onPress={() => router.back()}
-                    style={styles.backButton}
+                <Animated.View
+                    entering={FadeIn.duration(500).delay(600)}
+                    style={styles.footer}
                 >
-                    <Text style={styles.backButtonText}>← BACK TO HOME</Text>
-                </AnimatedButton>
+                    <Text style={styles.footerText}>Already have an account? </Text>
+                    <Pressable onPress={() => router.push('/auth/sign-in')}>
+                        <Text style={styles.footerLink}>Sign in</Text>
+                    </Pressable>
+                </Animated.View>
             </ScrollView>
         </SafeAreaView>
     );
@@ -200,146 +276,223 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: DesignTokens.colors.background,
     },
+
+    // Header
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+    },
+    backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        padding: 8,
+    },
+    backArrow: {
+        fontFamily: 'Lora',
+        fontSize: 18,
+        color: DesignTokens.colors.textSecondary,
+    },
+    backText: {
+        fontFamily: 'Raleway-Medium',
+        fontSize: 14,
+        color: DesignTokens.colors.textSecondary,
+    },
+    logoContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    logo: {
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 22,
+        color: DesignTokens.colors.text,
+    },
+    logoAccent: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 18,
+        color: DesignTokens.colors.accent,
+    },
+
+    // Content
     content: {
         flexGrow: 1,
-        paddingHorizontal: 20,
-        paddingVertical: 30,
+        paddingHorizontal: 24,
+        paddingTop: 10,
+        paddingBottom: 40,
     },
     contentDesktop: {
         alignItems: 'center',
         paddingHorizontal: 40,
     },
-    header: {
-        marginBottom: 30,
+
+    // Welcome
+    welcomeContainer: {
         alignItems: 'center',
+        marginBottom: 28,
+    },
+    welcomeOrnament: {
+        fontFamily: 'PlayfairDisplay-Italic',
+        fontSize: 80,
+        color: DesignTokens.colors.accent,
+        opacity: 0.2,
+        position: 'absolute',
+        top: -50,
     },
     title: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 32,
+        fontFamily: 'PlayfairDisplay-Bold',
+        fontSize: 34,
         color: DesignTokens.colors.text,
-        letterSpacing: 2,
-        marginBottom: 8,
+        textAlign: 'center',
+        marginBottom: 14,
     },
     titleDesktop: {
-        fontSize: 48,
+        fontSize: 46,
+    },
+    goldLine: {
+        width: 50,
+        height: 2,
+        backgroundColor: DesignTokens.colors.accent,
+        marginBottom: 14,
+        borderRadius: 1,
     },
     subtitle: {
-        fontFamily: 'Outfit_400Regular',
-        fontSize: 16,
-        color: DesignTokens.colors.textLight,
+        fontFamily: 'Lora',
+        fontSize: 15,
+        color: DesignTokens.colors.textSecondary,
+        textAlign: 'center',
+        maxWidth: 300,
     },
+
+    // Error
     errorBanner: {
-        backgroundColor: '#fee2e2',
-        borderWidth: DesignTokens.borders.regular,
-        borderColor: '#ef4444',
+        backgroundColor: 'rgba(165, 74, 74, 0.1)',
+        borderWidth: 1,
+        borderColor: DesignTokens.colors.error,
+        borderRadius: DesignTokens.radius.md,
         padding: 16,
         marginBottom: 20,
         width: '100%',
-        maxWidth: 450,
+        maxWidth: 420,
+        alignSelf: 'center',
     },
     errorText: {
-        fontFamily: 'Outfit_600SemiBold',
-        color: '#dc2626',
-        fontSize: 12,
-        letterSpacing: 0.5,
+        fontFamily: 'Lora',
+        color: DesignTokens.colors.error,
+        fontSize: 14,
+        textAlign: 'center',
     },
+
+    // Form Card
     card: {
-        backgroundColor: DesignTokens.colors.background,
-        borderWidth: DesignTokens.borders.thick,
-        borderColor: DesignTokens.colors.border,
-        padding: DesignTokens.spacing.lg,
+        backgroundColor: DesignTokens.colors.surface,
+        borderRadius: DesignTokens.radius.xl,
+        padding: 28,
         width: '100%',
-        maxWidth: 450,
-        shadowColor: DesignTokens.colors.border,
-        shadowOffset: { width: 6, height: 6 },
-        shadowOpacity: 1,
-        shadowRadius: 0,
-        elevation: 8,
+        maxWidth: 420,
+        alignSelf: 'center',
+        ...DesignTokens.shadows.elevated,
     },
     cardDesktop: {
-        padding: 32,
+        padding: 40,
+    },
+
+    // Inputs
+    inputGroup: {
+        marginBottom: 18,
     },
     label: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 11,
-        color: DesignTokens.colors.text,
-        letterSpacing: 1.5,
-        marginBottom: 8,
-    },
-    input: {
-        backgroundColor: '#F5F5F5',
-        borderWidth: DesignTokens.borders.regular,
-        borderColor: DesignTokens.colors.border,
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-        fontSize: 16,
-        fontFamily: 'Outfit_400Regular',
-        color: DesignTokens.colors.text,
-        marginBottom: 20,
-    },
-    submitButton: {
-        marginBottom: 24,
-        marginTop: 8,
-    },
-    submitButtonText: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 14,
-        color: DesignTokens.colors.textOnPrimary,
+        fontFamily: 'Raleway-Medium',
+        fontSize: 13,
+        color: DesignTokens.colors.textSecondary,
+        marginBottom: 10,
         letterSpacing: 0.5,
     },
-    submitButtonArrow: {
-        fontSize: 18,
-        color: DesignTokens.colors.textOnPrimary,
+    input: {
+        backgroundColor: DesignTokens.colors.backgroundAlt,
+        borderWidth: 1,
+        borderColor: DesignTokens.colors.border,
+        borderRadius: DesignTokens.radius.md,
+        paddingVertical: 15,
+        paddingHorizontal: 18,
+        fontSize: 16,
+        fontFamily: 'Lora',
+        color: DesignTokens.colors.text,
     },
+    inputFocused: {
+        borderColor: DesignTokens.colors.accent,
+        backgroundColor: DesignTokens.colors.surface,
+    },
+
+    // Submit Button
+    submitButton: {
+        marginTop: 6,
+        marginBottom: 22,
+    },
+    submitButtonText: {
+        fontFamily: 'Raleway-SemiBold',
+        fontSize: 15,
+        color: DesignTokens.colors.textOnAccent,
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+    },
+
+    // Divider
     divider: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 22,
     },
     dividerLine: {
         flex: 1,
-        height: 2,
+        height: 1,
         backgroundColor: DesignTokens.colors.border,
     },
     dividerText: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 11,
-        color: DesignTokens.colors.textLight,
+        fontFamily: 'Raleway',
+        fontSize: 13,
+        color: DesignTokens.colors.textMuted,
         marginHorizontal: 16,
-        letterSpacing: 1,
     },
+
+    // Google
     googleButtonText: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 12,
+        fontFamily: 'Raleway-SemiBold',
+        fontSize: 15,
         color: DesignTokens.colors.text,
         letterSpacing: 0.5,
     },
+
+    // Terms
+    termsText: {
+        fontFamily: 'Lora',
+        fontSize: 12,
+        color: DesignTokens.colors.textMuted,
+        textAlign: 'center',
+        marginTop: 20,
+        maxWidth: 320,
+        alignSelf: 'center',
+        lineHeight: 18,
+    },
+
+    // Footer
     footer: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: 24,
-        gap: 8,
     },
     footerText: {
-        fontFamily: 'Outfit_400Regular',
-        fontSize: 14,
-        color: DesignTokens.colors.textLight,
+        fontFamily: 'Lora',
+        fontSize: 15,
+        color: DesignTokens.colors.textSecondary,
     },
     footerLink: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 12,
-        color: DesignTokens.colors.primary,
-        letterSpacing: 0.5,
-    },
-    backButton: {
-        marginTop: 24,
-        alignSelf: 'center',
-    },
-    backButtonText: {
-        fontFamily: 'Outfit_500Medium',
-        fontSize: 12,
-        color: DesignTokens.colors.textLight,
-        letterSpacing: 0.5,
+        fontFamily: 'Lora-Medium',
+        fontSize: 15,
+        color: DesignTokens.colors.accent,
     },
 });

@@ -2,9 +2,9 @@ import React, { PropsWithChildren, useState } from "react";
 import { Pressable, StyleSheet, View, ViewStyle } from "react-native";
 import Animated, {
     Easing,
-    interpolate,
     useAnimatedStyle,
     useSharedValue,
+    withSpring,
     withTiming,
 } from "react-native-reanimated";
 import { DesignTokens } from "../constants/DesignSystem";
@@ -12,25 +12,27 @@ import { DesignTokens } from "../constants/DesignSystem";
 type AnimatedButtonProps = PropsWithChildren<{
     style?: ViewStyle;
     onPress?: () => void;
-    variant?: 'primary' | 'secondary' | 'outline';
+    variant?: 'primary' | 'secondary' | 'ghost' | 'outline' | 'link';
+    disabled?: boolean;
+    size?: 'sm' | 'md' | 'lg';
 }>;
 
-// Ripple effect component
-function ClickRipple({ x, y, onComplete }: { x: number; y: number; onComplete: () => void }) {
+// Elegant shimmer effect
+function GoldShimmer({ x, y, onComplete }: { x: number; y: number; onComplete: () => void }) {
     const scale = useSharedValue(0);
-    const opacity = useSharedValue(1);
+    const opacity = useSharedValue(0.6);
 
     React.useEffect(() => {
-        scale.value = withTiming(1.5, {
-            duration: DesignTokens.animation.ripple,
-            easing: Easing.bezier(0.4, 0, 0.2, 1),
+        scale.value = withSpring(2, {
+            damping: 15,
+            stiffness: 150,
         });
         opacity.value = withTiming(0, {
-            duration: DesignTokens.animation.ripple,
+            duration: 500,
             easing: Easing.bezier(0.4, 0, 0.2, 1),
         });
 
-        const timer = setTimeout(onComplete, DesignTokens.animation.ripple);
+        const timer = setTimeout(onComplete, 500);
         return () => clearTimeout(timer);
     }, []);
 
@@ -42,9 +44,9 @@ function ClickRipple({ x, y, onComplete }: { x: number; y: number; onComplete: (
     return (
         <Animated.View
             style={[
-                styles.ripple,
+                styles.shimmer,
                 animStyle,
-                { left: x - 20, top: y - 20 }
+                { left: x - 30, top: y - 30 }
             ]}
         />
     );
@@ -54,81 +56,135 @@ export function AnimatedButton({
     children,
     style,
     onPress,
-    variant = 'primary'
+    variant = 'primary',
+    disabled = false,
+    size = 'md',
 }: AnimatedButtonProps) {
-    const t = useSharedValue(0);
-    const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
-    let rippleId = 0;
+    const scale = useSharedValue(1);
+    const opacity = useSharedValue(1);
+    const [shimmers, setShimmers] = useState<{ id: number; x: number; y: number }[]>([]);
+    let shimmerId = 0;
 
-    const animStyle = useAnimatedStyle(() => {
-        const { idle, active } = DesignTokens.buttonPress;
-        const translateX = interpolate(t.value, [0, 1], [idle.translate.x, active.translate.x]);
-        const translateY = interpolate(t.value, [0, 1], [idle.translate.y, active.translate.y]);
-        const shadowX = interpolate(t.value, [0, 1], [idle.shadowOffset.width, active.shadowOffset.width]);
-        const shadowY = interpolate(t.value, [0, 1], [idle.shadowOffset.height, active.shadowOffset.height]);
+    const animStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }],
+        opacity: opacity.value,
+    }));
 
-        return {
-            transform: [{ translateX }, { translateY }],
-            shadowOffset: { width: shadowX, height: shadowY },
-        };
-    });
+    const handlePressIn = (event: any) => {
+        scale.value = withSpring(DesignTokens.buttonStates.pressed.scale, {
+            damping: 15,
+            stiffness: 400,
+        });
 
-    const animateTo = (to: number) => {
-        t.value = withTiming(to, {
-            duration: DesignTokens.animation.fast,
-            easing: Easing.out(Easing.ease),
+        if (variant === 'primary') {
+            const { locationX, locationY } = event.nativeEvent;
+            const newShimmer = { id: ++shimmerId, x: locationX, y: locationY };
+            setShimmers(prev => [...prev, newShimmer]);
+        }
+    };
+
+    const handlePressOut = () => {
+        scale.value = withSpring(DesignTokens.buttonStates.idle.scale, {
+            damping: 15,
+            stiffness: 400,
         });
     };
 
-    const handlePressIn = (event: any) => {
-        animateTo(1);
-
-        const { locationX, locationY } = event.nativeEvent;
-        const newRipple = { id: ++rippleId, x: locationX, y: locationY };
-        setRipples(prev => [...prev, newRipple]);
+    const handleHoverIn = () => {
+        scale.value = withSpring(DesignTokens.buttonStates.hover.scale, {
+            damping: 20,
+            stiffness: 300,
+        });
     };
 
-    const removeRipple = (id: number) => {
-        setRipples(prev => prev.filter(r => r.id !== id));
+    const handleHoverOut = () => {
+        scale.value = withSpring(DesignTokens.buttonStates.idle.scale, {
+            damping: 20,
+            stiffness: 300,
+        });
+    };
+
+    const removeShimmer = (id: number) => {
+        setShimmers(prev => prev.filter(s => s.id !== id));
     };
 
     const getVariantStyle = () => {
         switch (variant) {
             case 'primary':
                 return {
-                    backgroundColor: DesignTokens.colors.primary,
-                    borderColor: DesignTokens.colors.border,
+                    backgroundColor: DesignTokens.colors.accent,
+                    borderColor: 'transparent',
+                    ...DesignTokens.shadows.soft,
                 };
             case 'secondary':
                 return {
-                    backgroundColor: DesignTokens.colors.background,
+                    backgroundColor: DesignTokens.colors.surface,
                     borderColor: DesignTokens.colors.border,
+                    borderWidth: 1,
+                    ...DesignTokens.shadows.subtle,
+                };
+            case 'ghost':
+                return {
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent',
                 };
             case 'outline':
                 return {
                     backgroundColor: 'transparent',
-                    borderColor: DesignTokens.colors.border,
+                    borderColor: DesignTokens.colors.primary,
+                    borderWidth: 1.5,
+                };
+            case 'link':
+                return {
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent',
+                };
+        }
+    };
+
+    const getSizeStyle = () => {
+        switch (size) {
+            case 'sm':
+                return {
+                    paddingVertical: 10,
+                    paddingHorizontal: 20,
+                };
+            case 'md':
+                return {
+                    paddingVertical: 14,
+                    paddingHorizontal: 28,
+                };
+            case 'lg':
+                return {
+                    paddingVertical: 18,
+                    paddingHorizontal: 36,
                 };
         }
     };
 
     return (
         <Pressable
-            onPress={onPress}
-            onPressIn={handlePressIn}
-            onPressOut={() => animateTo(0)}
-            onHoverIn={() => animateTo(0.5)}
-            onHoverOut={() => animateTo(0)}
-            style={[styles.pressable, style]}
+            onPress={disabled ? undefined : onPress}
+            onPressIn={disabled ? undefined : handlePressIn}
+            onPressOut={disabled ? undefined : handlePressOut}
+            onHoverIn={disabled ? undefined : handleHoverIn}
+            onHoverOut={disabled ? undefined : handleHoverOut}
+            style={[styles.pressable, style, disabled && styles.disabled]}
         >
-            <Animated.View style={[styles.btn, animStyle, getVariantStyle()]}>
-                {/* Ripple effects */}
-                {ripples.map(ripple => (
-                    <ClickRipple
-                        key={ripple.id}
-                        x={ripple.x}
-                        y={ripple.y}
-                        onComplete={() => removeRipple(ripple.id)}
+            <Animated.View style={[
+                styles.btn,
+                animStyle,
+                getVariantStyle(),
+                getSizeStyle(),
+                disabled && { opacity: 0.5 }
+            ]}>
+                {/* Gold shimmer effects */}
+                {shimmers.map(shimmer => (
+                    <GoldShimmer
+                        key={shimmer.id}
+                        x={shimmer.x}
+                        y={shimmer.y}
+                        onComplete={() => removeShimmer(shimmer.id)}
                     />
                 ))}
                 <View style={styles.content}>{children}</View>
@@ -139,32 +195,26 @@ export function AnimatedButton({
 
 const styles = StyleSheet.create({
     pressable: {},
+    disabled: {
+        pointerEvents: 'none',
+    },
     btn: {
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 0, // Sharp corners - brutalist
-        borderWidth: DesignTokens.borders.regular,
+        borderRadius: DesignTokens.radius.md,
         overflow: 'hidden',
         position: 'relative',
-
-        // Hard offset shadow
-        shadowColor: DesignTokens.colors.border,
-        shadowOpacity: 1,
-        shadowRadius: 0,
-        elevation: 4,
     },
     content: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
+        gap: 10,
     },
-    ripple: {
+    shimmer: {
         position: 'absolute',
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: DesignTokens.colors.accent,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: DesignTokens.colors.shimmer,
         zIndex: 0,
     },
 });
