@@ -96,10 +96,11 @@ export function EvalReportCard({ evalResult, loading, onRunEval, onPublish }: Ev
         return (
             <View style={styles.container}>
                 <View style={styles.emptyState}>
-                    <Text style={styles.emptyTitle}>Character Evaluation</Text>
+                    <Text style={styles.emptyTitle}>Conversation Evaluation</Text>
                     <Text style={styles.emptyText}>
-                        Run an evaluation to test your character's quality across 7 dimensions.
-                        You need a score of 28/35 to publish.
+                        {onPublish
+                            ? "Run an evaluation to test your character's quality across 7 dimensions. You need a score of 28/35 to publish."
+                            : "Run an evaluation to score the current conversation quality across 7 dimensions."}
                     </Text>
                     {onRunEval && (
                         <TouchableOpacity style={styles.runButton} onPress={onRunEval}>
@@ -168,7 +169,7 @@ export function EvalReportCard({ evalResult, loading, onRunEval, onPublish }: Ev
                 )}
             </View>
 
-            {!evalResult.passed && (
+            {!evalResult.passed && onPublish && (
                 <View style={styles.failedNotice}>
                     <Text style={styles.failedText}>
                         Score must be 28+ to publish. Review suggestions above.
