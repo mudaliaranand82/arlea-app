@@ -2,11 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, SafeAreaView, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { EvalReportCard, EvalResult } from '../../../components/EvalReportCard';
 import { Colors } from '../../../constants/Colors';
 import { GlobalStyles } from '../../../constants/Theme';
-import { auth, db } from '../../../firebaseConfig';
+import { auth, db, functions } from '../../../firebaseConfig';
 import { ChatService } from '../../../services/ChatService';
 
 type Message = {
@@ -57,6 +59,43 @@ export default function ChatScreen() {
     const [loading, setLoading] = useState(true);
     const [typing, setTyping] = useState(false);
     const flatListRef = useRef<FlatList>(null);
+
+    // Eval State
+    const [evalModalVisible, setEvalModalVisible] = useState(false);
+    const [evalResult, setEvalResult] = useState<EvalResult | null>(null);
+    const [evalLoading, setEvalLoading] = useState(false);
+
+    const handleRunEval = async () => {
+        if (!character) return;
+        setEvalLoading(true);
+        setEvalModalVisible(true);
+        // Clear previous result if re-running
+        if (evalResult) setEvalResult(null);
+
+        try {
+            // Format messages for backend
+            const conversationHistory = messages
+                .filter(m => m.id !== 'init')
+                .map(m => ({
+                    sender: m.sender,
+                    text: m.text
+                }));
+
+            const evaluateConversation = httpsCallable(functions, 'evaluateCurrentConversation');
+            const result = await evaluateConversation({
+                characterId: character.id || id, // id from params is doc id
+                conversationHistory
+            });
+
+            setEvalResult(result.data as EvalResult);
+        } catch (error) {
+            console.error("Eval failed:", error);
+            alert("Failed to run evaluation. See console.");
+            setEvalModalVisible(false);
+        } finally {
+            setEvalLoading(false);
+        }
+    };
 
     useEffect(() => {
         const fetchCharacter = async () => {
@@ -189,105 +228,133 @@ export default function ChatScreen() {
                         <Text style={{ fontSize: 12, color: Colors.classic.textSecondary }}>{character.role}</Text>
                     </View>
                 </View>
-                <TouchableOpacity
-                    onPress={async () => {
-                        await signOut(auth);
-                        router.replace('/');
-                    }}
-                    style={{ padding: 8 }}
-                >
-                    <Ionicons name="log-out-outline" size={22} color={Colors.classic.textSecondary} />
-                </TouchableOpacity>
-            </View>
-
-            {/* Chat Messages */}
-            <FlatList
-                ref={flatListRef}
-                data={messages}
-                keyExtractor={item => item.id}
-                contentContainerStyle={{ padding: 15, paddingBottom: 10 }}
-                ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-                onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-                ListFooterComponent={typing ? <View style={{ marginTop: 12 }}><TypingIndicator characterName={character.name} /></View> : null}
-                renderItem={({ item }) => (
-                    <View style={{
-                        alignSelf: item.sender === 'user' ? 'flex-end' : 'flex-start',
-                        backgroundColor: item.sender === 'user' ? Colors.classic.primary : Colors.classic.surface,
-                        padding: 14,
-                        borderRadius: 18,
-                        maxWidth: '80%',
-                        borderBottomRightRadius: item.sender === 'user' ? 4 : 18,
-                        borderBottomLeftRadius: item.sender === 'character' ? 4 : 18,
-                        borderWidth: item.sender === 'character' ? 1 : 0,
-                        borderColor: Colors.classic.border,
-                        // Subtle shadow for depth
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.05,
-                        shadowRadius: 2,
-                        elevation: 1
-                    }}>
-                        <Text style={{
-                            color: item.sender === 'user' ? 'white' : Colors.classic.text,
-                            fontFamily: 'Outfit_400Regular',
-                            fontSize: 15,
-                            lineHeight: 22
-                        }}>{item.text}</Text>
-                    </View>
-                )}
-            />
-
-            {/* Input Area */}
-            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={10}>
-                <View style={{
-                    flexDirection: 'row',
-                    padding: 12,
-                    paddingHorizontal: 16,
-                    borderTopWidth: 1,
-                    borderColor: Colors.classic.border,
-                    backgroundColor: 'white',
-                    alignItems: 'center',
-                }}>
-                    <TextInput
-                        style={{
-                            flex: 1,
-                            backgroundColor: '#f5f5f5',
-                            borderRadius: 22,
-                            paddingHorizontal: 16,
-                            paddingVertical: Platform.OS === 'ios' ? 12 : 10,
-                            fontFamily: 'Outfit_400Regular',
-                            fontSize: 15,
-                            maxHeight: 100,
-                            minHeight: 44,
-                            borderWidth: 1,
-                            borderColor: '#e0e0e0',
-                        }}
-                        placeholder="Type your message..."
-                        placeholderTextColor="#999"
-                        value={message}
-                        onChangeText={setMessage}
-                        onKeyPress={handleKeyPress}
-                        multiline
-                        blurOnSubmit={false}
-                        returnKeyType="default"
-                    />
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TouchableOpacity onPress={handleRunEval} style={{ padding: 8, marginRight: 8, backgroundColor: Colors.classic.secondary, borderRadius: 8 }}>
+                        <Text style={{ fontFamily: 'Outfit_600SemiBold', fontSize: 12 }}>Eval</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
-                        onPress={handleSend}
-                        disabled={!message.trim() || typing}
-                        style={{
-                            backgroundColor: message.trim() && !typing ? Colors.classic.primary : '#ddd',
-                            width: 44,
-                            height: 44,
-                            borderRadius: 22,
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            marginLeft: 10,
+                        onPress={async () => {
+                            await signOut(auth);
+                            router.replace('/');
                         }}
+                        style={{ padding: 8 }}
                     >
-                        <Ionicons name="send" size={18} color="white" />
+                        <Ionicons name="log-out-outline" size={22} color={Colors.classic.textSecondary} />
                     </TouchableOpacity>
                 </View>
-            </KeyboardAvoidingView>
+
+                {/* Chat Messages */}
+                <FlatList
+                    ref={flatListRef}
+                    data={messages}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={{ padding: 15, paddingBottom: 10 }}
+                    ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                    ListFooterComponent={typing ? <View style={{ marginTop: 12 }}><TypingIndicator characterName={character.name} /></View> : null}
+                    renderItem={({ item }) => (
+                        <View style={{
+                            alignSelf: item.sender === 'user' ? 'flex-end' : 'flex-start',
+                            backgroundColor: item.sender === 'user' ? Colors.classic.primary : Colors.classic.surface,
+                            padding: 14,
+                            borderRadius: 18,
+                            maxWidth: '80%',
+                            borderBottomRightRadius: item.sender === 'user' ? 4 : 18,
+                            borderBottomLeftRadius: item.sender === 'character' ? 4 : 18,
+                            borderWidth: item.sender === 'character' ? 1 : 0,
+                            borderColor: Colors.classic.border,
+                            // Subtle shadow for depth
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.05,
+                            shadowRadius: 2,
+                            elevation: 1
+                        }}>
+                            <Text style={{
+                                color: item.sender === 'user' ? 'white' : Colors.classic.text,
+                                fontFamily: 'Outfit_400Regular',
+                                fontSize: 15,
+                                lineHeight: 22
+                            }}>{item.text}</Text>
+                        </View>
+                    )}
+                />
+
+                {/* Input Area */}
+                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={10}>
+                    <View style={{
+                        flexDirection: 'row',
+                        padding: 12,
+                        paddingHorizontal: 16,
+                        borderTopWidth: 1,
+                        borderColor: Colors.classic.border,
+                        backgroundColor: 'white',
+                        alignItems: 'center',
+                    }}>
+                        <TextInput
+                            style={{
+                                flex: 1,
+                                backgroundColor: '#f5f5f5',
+                                borderRadius: 22,
+                                paddingHorizontal: 16,
+                                paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+                                fontFamily: 'Outfit_400Regular',
+                                fontSize: 15,
+                                maxHeight: 100,
+                                minHeight: 44,
+                                borderWidth: 1,
+                                borderColor: '#e0e0e0',
+                            }}
+                            placeholder="Type your message..."
+                            placeholderTextColor="#999"
+                            value={message}
+                            onChangeText={setMessage}
+                            onKeyPress={handleKeyPress}
+                            multiline
+                            blurOnSubmit={false}
+                            returnKeyType="default"
+                        />
+                        <TouchableOpacity
+                            onPress={handleSend}
+                            disabled={!message.trim() || typing}
+                            style={{
+                                backgroundColor: message.trim() && !typing ? Colors.classic.primary : '#ddd',
+                                width: 44,
+                                height: 44,
+                                borderRadius: 22,
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                marginLeft: 10,
+                            }}
+                        >
+                            <Ionicons name="send" size={18} color="white" />
+                        </TouchableOpacity>
+                    </View>
+                </KeyboardAvoidingView>
+
+                {/* Eval Modal */}
+                <Modal
+                    visible={evalModalVisible}
+                    animationType="slide"
+                    presentationStyle="pageSheet"
+                    onRequestClose={() => setEvalModalVisible(false)}
+                >
+                    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderColor: '#eee', alignItems: 'center' }}>
+                            <Text style={{ fontFamily: 'Outfit_700Bold', fontSize: 18 }}>Evaluator</Text>
+                            <TouchableOpacity onPress={() => setEvalModalVisible(false)} style={{ padding: 8 }}>
+                                <Text style={{ fontFamily: 'Outfit_500Medium', color: Colors.classic.primary, fontSize: 16 }}>Close</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <ScrollView contentContainerStyle={{ padding: 20 }}>
+                            <EvalReportCard
+                                evalResult={evalResult}
+                                loading={evalLoading}
+                                onRunEval={handleRunEval}
+                            />
+                        </ScrollView>
+                    </SafeAreaView>
+                </Modal>
         </SafeAreaView>
     );
 }
