@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React, { PropsWithChildren, useCallback, useState } from "react";
-import { Pressable, StyleSheet, View, ViewStyle } from "react-native";
+import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 import Animated, {
     Easing,
     interpolate,
@@ -11,7 +11,7 @@ import Animated, {
 import { DesignTokens } from "../constants/DesignSystem";
 
 type AnimatedCardProps = PropsWithChildren<{
-    style?: ViewStyle;
+    style?: StyleProp<ViewStyle>;
     onPress?: () => void;
     variant?: 'light' | 'dark' | 'accent';
     disabled?: boolean;
