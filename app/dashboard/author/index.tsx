@@ -157,7 +157,7 @@ export default function AuthorDashboard() {
         setImporting(false);
     };
 
-    const openPublishModal = (bookId: string, title: string) => {
+    const openPublishModal = async (bookId: string, title: string) => {
         // Check if all characters have passed eval
         const bookChars = characters.filter(c => c.bookId === bookId);
 
@@ -185,6 +185,29 @@ export default function AuthorDashboard() {
                 `${problematicChars.length} character(s) scored below 28:\n\n${problematicChars.map(c => `• ${c.name} (${c.lastEvalScore || 'N/A'}/35)`).join('\n')}\n\nAll characters need 28+ to publish.`
             );
             return;
+        }
+
+        // Phase 2: Governance Gate - Check regression status (Warning only)
+        const failedRegressionChars = bookChars.filter(c => c.regressionStatus === 'failed');
+        if (failedRegressionChars.length > 0) {
+            // Show warning but allow to proceed (soft gate)
+            const proceed = await new Promise<boolean>((resolve) => {
+                if (Platform.OS === 'web') {
+                    resolve(window.confirm(
+                        `⚠️ Regression Warning\n\n${failedRegressionChars.length} character(s) failed regression testing:\n${failedRegressionChars.map(c => `• ${c.name}`).join('\n')}\n\nThis means their behavior may have drifted from the Golden baseline. Publish anyway?`
+                    ));
+                } else {
+                    Alert.alert(
+                        "⚠️ Regression Warning",
+                        `${failedRegressionChars.length} character(s) failed regression testing. Their behavior may have drifted. Publish anyway?`,
+                        [
+                            { text: "Cancel", onPress: () => resolve(false), style: "cancel" },
+                            { text: "Publish Anyway", onPress: () => resolve(true) }
+                        ]
+                    );
+                }
+            });
+            if (!proceed) return;
         }
 
         // All checks passed - open publish modal
@@ -343,7 +366,25 @@ export default function AuthorDashboard() {
                                                             <Text style={styles.characterAvatarText}>{char.name?.[0]}</Text>
                                                         </View>
                                                         <View style={styles.characterInfo}>
-                                                            <Text style={styles.characterName}>{char.name}</Text>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                                                <Text style={styles.characterName}>{char.name}</Text>
+                                                                {/* Certification State Badge */}
+                                                                {char.certificationState === 'certified' && (
+                                                                    <View style={[styles.certBadge, styles.certBadgeCertified]}>
+                                                                        <Text style={styles.certBadgeText}>✓ CERTIFIED</Text>
+                                                                    </View>
+                                                                )}
+                                                                {char.certificationState === 'evaluated' && (
+                                                                    <View style={[styles.certBadge, styles.certBadgeEvaluated]}>
+                                                                        <Text style={styles.certBadgeText}>EVALUATED</Text>
+                                                                    </View>
+                                                                )}
+                                                                {char.certificationState === 'monitored' && (
+                                                                    <View style={[styles.certBadge, styles.certBadgeMonitored]}>
+                                                                        <Text style={styles.certBadgeText}>⚠ MONITORED</Text>
+                                                                    </View>
+                                                                )}
+                                                            </View>
                                                             <Text style={styles.characterRole}>{char.role}</Text>
                                                         </View>
                                                         <TouchableOpacity
@@ -885,5 +926,26 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 16,
+    },
+    // Certification State Badges
+    certBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    certBadgeCertified: {
+        backgroundColor: '#dcfce7',
+    },
+    certBadgeEvaluated: {
+        backgroundColor: '#dbeafe',
+    },
+    certBadgeMonitored: {
+        backgroundColor: '#fef3c7',
+    },
+    certBadgeText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 8,
+        color: '#333',
+        letterSpacing: 0.5,
     },
 });
