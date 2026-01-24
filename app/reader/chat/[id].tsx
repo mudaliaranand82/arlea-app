@@ -97,6 +97,32 @@ export default function ChatScreen() {
         }
     };
 
+    const handleSaveGolden = async () => {
+        if (!evalResult || !character) return;
+        try {
+            // Re-format messages (same as eval)
+            const conversationHistory = messages
+                .filter(m => m.id !== 'init')
+                .map(m => ({
+                    sender: m.sender,
+                    text: m.text
+                }));
+
+            const saveGolden = httpsCallable(functions, 'saveGoldenConversation');
+            await saveGolden({
+                characterId: character.id || id,
+                conversationHistory,
+                scores: evalResult.scores,
+                evalId: (evalResult as any).evalId, // Assuming passed back
+                metricVersion: evalResult.metricVersion
+            });
+            alert("Success! Conversation saved as a Golden Test Case.");
+        } catch (error) {
+            console.error(error);
+            alert("Failed to save golden conversation.");
+        }
+    };
+
     useEffect(() => {
         const fetchCharacter = async () => {
             if (!id) return;
@@ -352,6 +378,7 @@ export default function ChatScreen() {
                             evalResult={evalResult}
                             loading={evalLoading}
                             onRunEval={handleRunEval}
+                            onSaveGolden={handleSaveGolden} // Only works if user is author/admin
                         />
                     </ScrollView>
                 </SafeAreaView>

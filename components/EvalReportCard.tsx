@@ -29,6 +29,9 @@ export type EvalResult = {
     passed: boolean;
     rating: 'excellent' | 'good' | 'acceptable' | 'needs_work' | 'not_ready';
     suggestions: string[];
+    // Versioning Metadata (Step 2)
+    characterDefinitionHash?: string;
+    metricVersion?: string;
 };
 
 type EvalReportCardProps = {
@@ -36,6 +39,7 @@ type EvalReportCardProps = {
     loading?: boolean;
     onRunEval?: () => void;
     onPublish?: () => void;
+    onSaveGolden?: () => void;
 };
 
 const DIMENSION_LABELS: Record<keyof EvalScores, string> = {
@@ -79,7 +83,7 @@ function ScoreBar({ label, score, feedback }: { label: string; score: number; fe
     );
 }
 
-export function EvalReportCard({ evalResult, loading, onRunEval, onPublish }: EvalReportCardProps) {
+export function EvalReportCard({ evalResult, loading, onRunEval, onPublish, onSaveGolden }: EvalReportCardProps) {
     if (loading) {
         return (
             <View style={styles.container}>
@@ -107,6 +111,14 @@ export function EvalReportCard({ evalResult, loading, onRunEval, onPublish }: Ev
                             <Text style={styles.runButtonText}>RUN EVAL</Text>
                         </TouchableOpacity>
                     )}
+                    {onSaveGolden && (
+                        <TouchableOpacity
+                            style={[styles.runButton, { marginTop: 10, backgroundColor: DesignTokens.colors.accent }]}
+                            onPress={onSaveGolden}
+                        >
+                            <Text style={[styles.runButtonText, { color: DesignTokens.colors.text }]}>SAVE AS GOLDEN</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
         );
@@ -129,6 +141,16 @@ export function EvalReportCard({ evalResult, loading, onRunEval, onPublish }: Ev
                     <Text style={styles.ratingDescription}>{ratingConfig.description}</Text>
                 </View>
             </View>
+
+            {/* Actions Row */}
+            {evalResult.passed && onSaveGolden && (
+                <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: DesignTokens.colors.accent }]}
+                    onPress={onSaveGolden}
+                >
+                    <Text style={[styles.actionButtonText, { color: DesignTokens.colors.text }]}>★ SAVE AS GOLDEN TEST</Text>
+                </TouchableOpacity>
+            )}
 
             {/* Dimension scores */}
             <View style={styles.scoresSection}>
@@ -218,21 +240,34 @@ const styles = StyleSheet.create({
     emptyText: {
         fontFamily: 'Outfit_400Regular',
         fontSize: 14,
-        color: '#666',
+        color: '#64748b',
         textAlign: 'center',
-        lineHeight: 20,
         marginBottom: 20,
+        lineHeight: 20,
     },
     runButton: {
         backgroundColor: DesignTokens.colors.primary,
-        paddingVertical: 14,
-        paddingHorizontal: 32,
+        paddingHorizontal: 24,
+        paddingVertical: 12,
         borderRadius: 8,
     },
     runButtonText: {
         fontFamily: 'Outfit_700Bold',
+        color: '#fff',
         fontSize: 14,
-        color: 'white',
+        letterSpacing: 1,
+    },
+    actionButton: {
+        padding: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: DesignTokens.colors.primary,
+    },
+    actionButtonText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 12,
         letterSpacing: 0.5,
     },
     header: {
