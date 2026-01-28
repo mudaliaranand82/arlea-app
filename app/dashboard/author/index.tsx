@@ -310,6 +310,14 @@ export default function AuthorDashboard() {
             {/* Page Title */}
             <View style={styles.pageHeader}>
                 <Text style={styles.pageTitle}>Author Dashboard</Text>
+                <TouchableOpacity
+                    style={{ padding: 8, backgroundColor: '#f0f9ff', borderRadius: 8 }}
+                    onPress={() => router.push('/admin/review-board' as any)}
+                >
+                    <Text style={{ fontFamily: 'Outfit_600SemiBold', color: '#0369a1', fontSize: 13 }}>
+                        🔬 GOV. BOARD
+                    </Text>
+                </TouchableOpacity>
             </View>
 
             {/* Deleting Overlay */}
@@ -580,6 +588,9 @@ const styles = StyleSheet.create({
         paddingVertical: 16,
         borderBottomWidth: 1,
         borderBottomColor: '#eee',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     pageTitle: {
         fontFamily: 'Outfit_700Bold',
