@@ -4,6 +4,7 @@ import { httpsCallable } from 'firebase/functions';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Animated,
     FlatList,
     ScrollView,
     StyleSheet,
@@ -47,6 +48,8 @@ type JudgeData = {
     results: JudgeResult[];
 };
 
+type ToastType = 'success' | 'error' | 'info';
+
 const DIMENSION_KEYS = [
     'voiceFidelity',
     'worldIntegrity',
@@ -57,14 +60,49 @@ const DIMENSION_KEYS = [
     'metaHandling'
 ];
 
-const DIMENSION_SHORT = {
-    voiceFidelity: 'Voice',
-    worldIntegrity: 'Canon',
-    boundaryAwareness: 'Boundary',
-    ageAppropriateness: 'Age',
-    emotionalSafety: 'Emo',
-    engagementQuality: 'Engage',
-    metaHandling: 'Meta'
+const DIMENSION_LABELS: Record<string, string> = {
+    voiceFidelity: 'Voice Fidelity',
+    worldIntegrity: 'Canon Integrity',
+    boundaryAwareness: 'Boundary Awareness',
+    ageAppropriateness: 'Age Appropriate',
+    emotionalSafety: 'Emotional Safety',
+    engagementQuality: 'Engagement',
+    metaHandling: 'Meta Handling'
+};
+
+// Step configuration
+const STEPS = [
+    { num: 1, title: 'Select Character', icon: '👤', color: '#6366f1', desc: 'Choose which character to stress test' },
+    { num: 2, title: 'Generate Scenarios', icon: '🧪', color: '#8b5cf6', desc: 'Create synthetic conversations' },
+    { num: 3, title: 'Run Judges', icon: '⚖️', color: '#ec4899', desc: 'Score with AI judges' },
+    { num: 4, title: 'Review Report', icon: '📊', color: '#14b8a6', desc: 'Analyze scores & concerns' },
+];
+
+// Toast Component
+const Toast = ({ message, type, visible, onHide }: { message: string; type: ToastType; visible: boolean; onHide: () => void }) => {
+    const fadeAnim = React.useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (visible) {
+            Animated.sequence([
+                Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+                Animated.delay(3000),
+                Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+            ]).start(() => onHide());
+        }
+    }, [visible]);
+
+    if (!visible) return null;
+
+    const bgColor = type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#3b82f6';
+    const icon = type === 'success' ? 'checkmark-circle' : type === 'error' ? 'close-circle' : 'information-circle';
+
+    return (
+        <Animated.View style={[styles.toast, { backgroundColor: bgColor, opacity: fadeAnim }]}>
+            <Ionicons name={icon as any} size={20} color="#fff" />
+            <Text style={styles.toastText}>{message}</Text>
+        </Animated.View>
+    );
 };
 
 export default function ReviewBoardDashboard() {
@@ -79,6 +117,15 @@ export default function ReviewBoardDashboard() {
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
     const [scoring, setScoring] = useState(false);
+
+    // Toast state
+    const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
+        message: '', type: 'info', visible: false
+    });
+
+    const showToast = (message: string, type: ToastType) => {
+        setToast({ message, type, visible: true });
+    };
 
     // Fetch characters
     useEffect(() => {
@@ -147,11 +194,10 @@ export default function ReviewBoardDashboard() {
         try {
             const generate = httpsCallable(functions, 'generateStressTestConversations');
             const result = await generate({ characterId: selectedCharacter.id, count: 21 });
-            alert(`Generated ${(result.data as any).conversationCount} conversations. Batch: ${(result.data as any).batchId}`);
-            // Refresh batches
+            showToast(`Generated ${(result.data as any).conversationCount} scenarios`, 'success');
             setSelectedCharacter({ ...selectedCharacter });
         } catch (e: any) {
-            alert('Generation failed: ' + e.message);
+            showToast(`Generation failed: ${e.message}`, 'error');
         } finally {
             setGenerating(false);
         }
@@ -160,19 +206,18 @@ export default function ReviewBoardDashboard() {
     const handleScoreBatch = async () => {
         if (!selectedCharacter || !selectedBatch) return;
         setScoring(true);
+        showToast('Running judges... this may take a few minutes', 'info');
         try {
-            // First run ARLEA scoring
             const scoreArlea = httpsCallable(functions, 'scoreStressTestBatch');
             await scoreArlea({ characterId: selectedCharacter.id, batchId: selectedBatch.id });
 
-            // Then run external judges
             const runJudges = httpsCallable(functions, 'runExternalJudges');
             await runJudges({ characterId: selectedCharacter.id, batchId: selectedBatch.id });
 
-            alert('Scoring complete! Refresh to see results.');
+            showToast('All judges complete! Loading results...', 'success');
             setSelectedBatch({ ...selectedBatch });
         } catch (e: any) {
-            alert('Scoring failed: ' + e.message);
+            showToast(`Scoring failed: ${e.message}`, 'error');
         } finally {
             setScoring(false);
         }
@@ -182,7 +227,6 @@ export default function ReviewBoardDashboard() {
     const getAverageScores = (judgeData: JudgeData): Record<string, number> => {
         const totals: Record<string, number> = {};
         const counts: Record<string, number> = {};
-
         for (const r of judgeData.results) {
             if (!r.scores) continue;
             for (const dim of DIMENSION_KEYS) {
@@ -192,7 +236,6 @@ export default function ReviewBoardDashboard() {
                 }
             }
         }
-
         const avgs: Record<string, number> = {};
         for (const dim of DIMENSION_KEYS) {
             avgs[dim] = counts[dim] ? parseFloat((totals[dim] / counts[dim]).toFixed(1)) : 0;
@@ -200,7 +243,6 @@ export default function ReviewBoardDashboard() {
         return avgs;
     };
 
-    // Get color for score
     const getScoreColor = (score: number): string => {
         if (score >= 4.5) return '#22c55e';
         if (score >= 4) return '#86efac';
@@ -209,7 +251,6 @@ export default function ReviewBoardDashboard() {
         return '#ef4444';
     };
 
-    // Collect all concerns from external judges
     const getAllConcerns = (): string[] => {
         const concerns: string[] = [];
         for (const judge of judges) {
@@ -219,6 +260,14 @@ export default function ReviewBoardDashboard() {
             }
         }
         return [...new Set(concerns)].filter(c => c && c !== 'List any specific concerns');
+    };
+
+    // Determine current step
+    const getCurrentStep = (): number => {
+        if (!selectedCharacter) return 1;
+        if (batches.length === 0) return 2;
+        if (judges.length === 0) return 3;
+        return 4;
     };
 
     if (loading) {
@@ -233,29 +282,75 @@ export default function ReviewBoardDashboard() {
         );
     }
 
+    const currentStep = getCurrentStep();
+
     return (
         <SafeAreaView style={styles.container}>
             <TopNav />
 
-            <View style={[styles.content, isDesktop && styles.contentDesktop]}>
-                {/* Header */}
-                <Text style={styles.pageTitle}>🔬 Synthetic Review Board</Text>
-                <Text style={styles.pageSubtitle}>Multi-judge evaluation pipeline for character governance</Text>
+            {/* Toast Notification */}
+            <Toast
+                message={toast.message}
+                type={toast.type}
+                visible={toast.visible}
+                onHide={() => setToast(prev => ({ ...prev, visible: false }))}
+            />
 
-                {/* Character Selector */}
-                <View style={styles.selectorContainer}>
-                    <Text style={styles.sectionTitle}>CHARACTER</Text>
+            <ScrollView contentContainerStyle={[styles.content, isDesktop && styles.contentDesktop]}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <Text style={styles.pageTitle}>🔬 Synthetic Review Board</Text>
+                    <Text style={styles.pageSubtitle}>Multi-judge evaluation pipeline for character governance</Text>
+                </View>
+
+                {/* Step Progress Indicator */}
+                <View style={styles.stepsContainer}>
+                    {STEPS.map((step, idx) => (
+                        <View key={step.num} style={styles.stepWrapper}>
+                            <View style={[
+                                styles.stepCircle,
+                                { backgroundColor: currentStep >= step.num ? step.color : '#e2e8f0' }
+                            ]}>
+                                <Text style={styles.stepIcon}>{step.icon}</Text>
+                            </View>
+                            <Text style={[
+                                styles.stepLabel,
+                                currentStep >= step.num && { color: step.color, fontWeight: '700' }
+                            ]}>{step.title}</Text>
+                            {idx < STEPS.length - 1 && (
+                                <View style={[
+                                    styles.stepLine,
+                                    currentStep > step.num && { backgroundColor: step.color }
+                                ]} />
+                            )}
+                        </View>
+                    ))}
+                </View>
+
+                {/* STEP 1: Character Selection */}
+                <View style={[styles.section, { borderLeftColor: STEPS[0].color }]}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={[styles.sectionNumber, { backgroundColor: STEPS[0].color }]}>1</Text>
+                        <View>
+                            <Text style={styles.sectionTitle}>Select Character</Text>
+                            <Text style={styles.sectionDesc}>Choose which AI character to stress test</Text>
+                        </View>
+                    </View>
                     <FlatList
                         data={characters}
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         keyExtractor={(item) => item.id}
+                        contentContainerStyle={{ paddingVertical: 8 }}
                         renderItem={({ item }) => (
                             <TouchableOpacity
-                                style={[styles.pill, selectedCharacter?.id === item.id && styles.pillActive]}
+                                style={[styles.characterPill, selectedCharacter?.id === item.id && styles.characterPillActive]}
                                 onPress={() => setSelectedCharacter(item)}
                             >
-                                <Text style={[styles.pillText, selectedCharacter?.id === item.id && styles.pillTextActive]}>
+                                <View style={styles.characterAvatar}>
+                                    <Text style={styles.characterAvatarText}>{item.name?.[0]}</Text>
+                                </View>
+                                <Text style={[styles.characterName, selectedCharacter?.id === item.id && styles.characterNameActive]}>
                                     {item.name}
                                 </Text>
                             </TouchableOpacity>
@@ -263,137 +358,149 @@ export default function ReviewBoardDashboard() {
                     />
                 </View>
 
-                {/* Actions */}
-                <View style={styles.actionsRow}>
-                    <TouchableOpacity
-                        style={[styles.actionButton, generating && styles.actionButtonDisabled]}
-                        onPress={handleGenerateStressTest}
-                        disabled={generating}
-                    >
-                        {generating ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                            <Text style={styles.actionButtonText}>🧪 GENERATE STRESS TEST</Text>
-                        )}
-                    </TouchableOpacity>
-
-                    {selectedBatch && (
+                {/* STEP 2: Generate Scenarios */}
+                <View style={[styles.section, { borderLeftColor: STEPS[1].color }]}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={[styles.sectionNumber, { backgroundColor: STEPS[1].color }]}>2</Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.sectionTitle}>Generate Stress Scenarios</Text>
+                            <Text style={styles.sectionDesc}>Create 21 synthetic conversations covering edge cases</Text>
+                        </View>
                         <TouchableOpacity
-                            style={[styles.actionButton, styles.actionButtonSecondary, scoring && styles.actionButtonDisabled]}
-                            onPress={handleScoreBatch}
-                            disabled={scoring}
+                            style={[styles.actionBtn, { backgroundColor: STEPS[1].color }, generating && styles.actionBtnDisabled]}
+                            onPress={handleGenerateStressTest}
+                            disabled={generating || !selectedCharacter}
                         >
-                            {scoring ? (
-                                <ActivityIndicator size="small" color={DesignTokens.colors.primary} />
+                            {generating ? (
+                                <ActivityIndicator size="small" color="#fff" />
                             ) : (
-                                <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>⚖️ RUN ALL JUDGES</Text>
+                                <Text style={styles.actionBtnText}>🧪 GENERATE</Text>
                             )}
                         </TouchableOpacity>
+                    </View>
+
+                    {/* Batch Selector */}
+                    {batches.length > 0 && (
+                        <View style={styles.batchSelector}>
+                            <Text style={styles.batchLabel}>EXISTING BATCHES</Text>
+                            <FlatList
+                                data={batches}
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                keyExtractor={(item) => item.id}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity
+                                        style={[styles.batchPill, selectedBatch?.id === item.id && styles.batchPillActive]}
+                                        onPress={() => setSelectedBatch(item)}
+                                    >
+                                        <Text style={[styles.batchText, selectedBatch?.id === item.id && styles.batchTextActive]}>
+                                            {item.conversationCount} scenarios
+                                        </Text>
+                                        <View style={[styles.batchDot, item.status === 'fully_scored' && styles.batchDotGreen]} />
+                                    </TouchableOpacity>
+                                )}
+                            />
+                        </View>
                     )}
                 </View>
 
-                {/* Batch Selector */}
-                {batches.length > 0 && (
-                    <View style={styles.selectorContainer}>
-                        <Text style={styles.sectionTitle}>TEST BATCH</Text>
-                        <FlatList
-                            data={batches}
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            keyExtractor={(item) => item.id}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={[styles.pill, selectedBatch?.id === item.id && styles.pillActive]}
-                                    onPress={() => setSelectedBatch(item)}
-                                >
-                                    <Text style={[styles.pillText, selectedBatch?.id === item.id && styles.pillTextActive]}>
-                                        {item.id.substring(0, 12)}... ({item.conversationCount} convs)
-                                    </Text>
-                                    <View style={[styles.statusDot, item.status === 'fully_scored' && styles.statusDotGreen]} />
-                                </TouchableOpacity>
+                {/* STEP 3: Run Judges */}
+                <View style={[styles.section, { borderLeftColor: STEPS[2].color }]}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={[styles.sectionNumber, { backgroundColor: STEPS[2].color }]}>3</Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.sectionTitle}>Run AI Judges</Text>
+                            <Text style={styles.sectionDesc}>Score with GPT-4 (Parent), Claude (Teacher), Gemini (Librarian)</Text>
+                        </View>
+                        <TouchableOpacity
+                            style={[styles.actionBtn, { backgroundColor: STEPS[2].color }, (scoring || !selectedBatch) && styles.actionBtnDisabled]}
+                            onPress={handleScoreBatch}
+                            disabled={scoring || !selectedBatch}
+                        >
+                            {scoring ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Text style={styles.actionBtnText}>⚖️ RUN JUDGES</Text>
                             )}
-                        />
+                        </TouchableOpacity>
                     </View>
-                )}
 
-                <ScrollView contentContainerStyle={styles.scrollContent}>
-                    {/* Heatmap Table */}
-                    {judges.length > 0 && (
-                        <View style={styles.panel}>
-                            <Text style={styles.panelTitle}>📊 SCORE HEATMAP</Text>
+                    {scoring && (
+                        <View style={styles.progressBox}>
+                            <ActivityIndicator size="small" color={STEPS[2].color} />
+                            <Text style={styles.progressText}>Processing 21 conversations × 3 judges... this takes 2-5 minutes</Text>
+                        </View>
+                    )}
+                </View>
 
-                            {/* Header Row */}
-                            <View style={styles.heatmapRow}>
-                                <Text style={[styles.heatmapCell, styles.heatmapHeader, { width: 80 }]}>Dimension</Text>
-                                {judges.map(j => (
-                                    <Text key={j.judgeId} style={[styles.heatmapCell, styles.heatmapHeader]}>
-                                        {j.judgeId === 'arlea' ? '🤖 ARLEA' : j.judgeId === 'parent' ? '👨‍👩‍👧' : j.judgeId === 'teacher' ? '👩‍🏫' : '📚'}
-                                    </Text>
-                                ))}
+                {/* STEP 4: Review Report */}
+                <View style={[styles.section, { borderLeftColor: STEPS[3].color }]}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={[styles.sectionNumber, { backgroundColor: STEPS[3].color }]}>4</Text>
+                        <View>
+                            <Text style={styles.sectionTitle}>Review Report</Text>
+                            <Text style={styles.sectionDesc}>Analyze score variance and aggregated concerns</Text>
+                        </View>
+                    </View>
+
+                    {judges.length > 0 ? (
+                        <>
+                            {/* Score Heatmap */}
+                            <View style={styles.heatmapContainer}>
+                                <Text style={styles.heatmapTitle}>📊 Score Heatmap</Text>
+                                <View style={styles.heatmapTable}>
+                                    {/* Header */}
+                                    <View style={styles.heatmapRow}>
+                                        <Text style={[styles.heatmapCell, styles.heatmapHeaderCell, { flex: 1.5 }]}>Dimension</Text>
+                                        {judges.map(j => (
+                                            <Text key={j.judgeId} style={[styles.heatmapCell, styles.heatmapHeaderCell]}>
+                                                {j.judgeId === 'arlea' ? '🤖' : j.judgeId.includes('parent') ? '👨‍👩‍👧' : j.judgeId.includes('teacher') ? '👩‍🏫' : '📚'}
+                                            </Text>
+                                        ))}
+                                    </View>
+                                    {/* Rows */}
+                                    {DIMENSION_KEYS.map(dim => {
+                                        const scores = judges.map(j => getAverageScores(j)[dim]);
+                                        const hasVariance = Math.max(...scores) - Math.min(...scores) > 1;
+                                        return (
+                                            <View key={dim} style={[styles.heatmapRow, hasVariance && styles.heatmapRowWarning]}>
+                                                <Text style={[styles.heatmapCell, { flex: 1.5, fontWeight: '500' }]}>
+                                                    {DIMENSION_LABELS[dim]}
+                                                </Text>
+                                                {judges.map(j => {
+                                                    const avg = getAverageScores(j)[dim];
+                                                    return (
+                                                        <View key={j.judgeId} style={[styles.heatmapCell, { backgroundColor: getScoreColor(avg) }]}>
+                                                            <Text style={styles.heatmapScore}>{avg}</Text>
+                                                        </View>
+                                                    );
+                                                })}
+                                                {hasVariance && <Ionicons name="warning" size={14} color="#f59e0b" />}
+                                            </View>
+                                        );
+                                    })}
+                                </View>
                             </View>
 
-                            {/* Data Rows */}
-                            {DIMENSION_KEYS.map(dim => {
-                                const scores = judges.map(j => getAverageScores(j)[dim]);
-                                const maxScore = Math.max(...scores);
-                                const minScore = Math.min(...scores);
-                                const hasVariance = maxScore - minScore > 1;
-
-                                return (
-                                    <View key={dim} style={[styles.heatmapRow, hasVariance && styles.heatmapRowHighlight]}>
-                                        <Text style={[styles.heatmapCell, { width: 80, fontWeight: '600' }]}>
-                                            {(DIMENSION_SHORT as any)[dim]}
-                                        </Text>
-                                        {judges.map(j => {
-                                            const avg = getAverageScores(j)[dim];
-                                            return (
-                                                <View
-                                                    key={j.judgeId}
-                                                    style={[styles.heatmapCell, { backgroundColor: getScoreColor(avg) }]}
-                                                >
-                                                    <Text style={styles.heatmapScore}>{avg}</Text>
-                                                </View>
-                                            );
-                                        })}
-                                        {hasVariance && (
-                                            <Ionicons name="warning" size={14} color="#f59e0b" style={{ marginLeft: 4 }} />
-                                        )}
-                                    </View>
-                                );
-                            })}
-                        </View>
-                    )}
-
-                    {/* Concerns Panel */}
-                    {getAllConcerns().length > 0 && (
-                        <View style={[styles.panel, styles.concernsPanel]}>
-                            <Text style={styles.panelTitle}>⚠️ AGGREGATED CONCERNS</Text>
-                            {getAllConcerns().map((concern, idx) => (
-                                <View key={idx} style={styles.concernItem}>
-                                    <Text style={styles.concernText}>• {concern}</Text>
+                            {/* Concerns */}
+                            {getAllConcerns().length > 0 && (
+                                <View style={styles.concernsBox}>
+                                    <Text style={styles.concernsTitle}>⚠️ Aggregated Concerns</Text>
+                                    {getAllConcerns().map((c, i) => (
+                                        <Text key={i} style={styles.concernItem}>• {c}</Text>
+                                    ))}
                                 </View>
-                            ))}
+                            )}
+                        </>
+                    ) : (
+                        <View style={styles.emptyReport}>
+                            <Text style={styles.emptyIcon}>📋</Text>
+                            <Text style={styles.emptyTitle}>No results yet</Text>
+                            <Text style={styles.emptyDesc}>Generate scenarios and run judges to see the report</Text>
                         </View>
                     )}
-
-                    {/* Empty State */}
-                    {batches.length === 0 && (
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyEmoji}>🧪</Text>
-                            <Text style={styles.emptyText}>No stress tests yet.</Text>
-                            <Text style={styles.emptySubtext}>Click "Generate Stress Test" to create one.</Text>
-                        </View>
-                    )}
-
-                    {selectedBatch && judges.length === 0 && (
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyEmoji}>⚖️</Text>
-                            <Text style={styles.emptyText}>Batch not scored yet.</Text>
-                            <Text style={styles.emptySubtext}>Click "Run All Judges" to score this batch.</Text>
-                        </View>
-                    )}
-                </ScrollView>
-            </View>
+                </View>
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -401,7 +508,7 @@ export default function ReviewBoardDashboard() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: DesignTokens.colors.background,
+        backgroundColor: '#f8fafc',
     },
     loadingContainer: {
         flex: 1,
@@ -411,172 +518,337 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: 12,
         fontFamily: 'Outfit_400Regular',
-        color: DesignTokens.colors.textLight,
+        color: '#64748b',
     },
     content: {
-        flex: 1,
-        padding: 16,
+        padding: 20,
+        paddingBottom: 60,
     },
     contentDesktop: {
-        paddingHorizontal: 40,
         maxWidth: 900,
         alignSelf: 'center',
+        width: '100%',
+    },
+    header: {
+        marginBottom: 24,
     },
     pageTitle: {
         fontFamily: 'Outfit_700Bold',
-        fontSize: 24,
+        fontSize: 28,
         color: DesignTokens.colors.primary,
         marginBottom: 4,
     },
     pageSubtitle: {
         fontFamily: 'Outfit_400Regular',
-        fontSize: 14,
-        color: DesignTokens.colors.textLight,
-        marginBottom: 20,
+        fontSize: 15,
+        color: '#64748b',
     },
-    scrollContent: {
-        paddingBottom: 40,
+
+    // Steps Progress
+    stepsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 32,
+        paddingHorizontal: 8,
     },
-    selectorContainer: {
+    stepWrapper: {
+        alignItems: 'center',
+        flex: 1,
+        position: 'relative',
+    },
+    stepCircle: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    stepIcon: {
+        fontSize: 20,
+    },
+    stepLabel: {
+        fontFamily: 'Outfit_500Medium',
+        fontSize: 11,
+        color: '#94a3b8',
+        textAlign: 'center',
+    },
+    stepLine: {
+        position: 'absolute',
+        top: 22,
+        left: '55%',
+        width: '90%',
+        height: 3,
+        backgroundColor: '#e2e8f0',
+        zIndex: -1,
+    },
+
+    // Sections
+    section: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 20,
         marginBottom: 16,
+        borderLeftWidth: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 12,
+    },
+    sectionNumber: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        color: '#fff',
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 28,
+        overflow: 'hidden',
     },
     sectionTitle: {
         fontFamily: 'Outfit_700Bold',
-        fontSize: 11,
-        color: DesignTokens.colors.textLight,
+        fontSize: 16,
+        color: '#1e293b',
+    },
+    sectionDesc: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 13,
+        color: '#64748b',
+    },
+
+    // Character Pills
+    characterPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 24,
+        marginRight: 10,
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    characterPillActive: {
+        backgroundColor: '#ede9fe',
+        borderColor: '#8b5cf6',
+    },
+    characterAvatar: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: DesignTokens.colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 8,
+    },
+    characterAvatarText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 12,
+        color: '#fff',
+    },
+    characterName: {
+        fontFamily: 'Outfit_500Medium',
+        fontSize: 14,
+        color: '#334155',
+    },
+    characterNameActive: {
+        fontFamily: 'Outfit_700Bold',
+        color: '#6366f1',
+    },
+
+    // Action Button
+    actionBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+    },
+    actionBtnDisabled: {
+        opacity: 0.5,
+    },
+    actionBtnText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 12,
+        color: '#fff',
+        letterSpacing: 0.5,
+    },
+
+    // Batch Selector
+    batchSelector: {
+        marginTop: 12,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+    },
+    batchLabel: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 10,
+        color: '#94a3b8',
         letterSpacing: 1,
         marginBottom: 8,
     },
-    pill: {
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        backgroundColor: '#f1f5f9',
-        borderRadius: 20,
-        marginRight: 8,
+    batchPill: {
         flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#f1f5f9',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+        marginRight: 8,
     },
-    pillActive: {
-        backgroundColor: DesignTokens.colors.primary,
+    batchPillActive: {
+        backgroundColor: '#8b5cf6',
     },
-    pillText: {
+    batchText: {
         fontFamily: 'Outfit_500Medium',
-        fontSize: 13,
-        color: DesignTokens.colors.text,
+        fontSize: 12,
+        color: '#64748b',
     },
-    pillTextActive: {
-        color: DesignTokens.colors.textOnPrimary,
+    batchTextActive: {
+        color: '#fff',
     },
-    statusDot: {
+    batchDot: {
         width: 8,
         height: 8,
         borderRadius: 4,
         backgroundColor: '#fbbf24',
         marginLeft: 6,
     },
-    statusDotGreen: {
+    batchDotGreen: {
         backgroundColor: '#22c55e',
     },
-    actionsRow: {
+
+    // Progress Box
+    progressBox: {
         flexDirection: 'row',
-        gap: 12,
-        marginBottom: 20,
-    },
-    actionButton: {
-        backgroundColor: DesignTokens.colors.primary,
-        paddingVertical: 12,
-        paddingHorizontal: 20,
+        alignItems: 'center',
+        backgroundColor: '#fdf4ff',
+        padding: 12,
         borderRadius: 8,
+        gap: 10,
     },
-    actionButtonSecondary: {
-        backgroundColor: '#fff',
-        borderWidth: 2,
-        borderColor: DesignTokens.colors.primary,
+    progressText: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 13,
+        color: '#a855f7',
+        flex: 1,
     },
-    actionButtonDisabled: {
-        opacity: 0.6,
+
+    // Heatmap
+    heatmapContainer: {
+        marginTop: 8,
     },
-    actionButtonText: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 12,
-        color: DesignTokens.colors.textOnPrimary,
-        letterSpacing: 0.5,
-    },
-    actionButtonTextSecondary: {
-        color: DesignTokens.colors.primary,
-    },
-    panel: {
-        backgroundColor: '#fff',
-        borderWidth: 2,
-        borderColor: DesignTokens.colors.border,
-        padding: 16,
-        marginBottom: 16,
-    },
-    concernsPanel: {
-        borderColor: '#fbbf24',
-        backgroundColor: '#fffbeb',
-    },
-    panelTitle: {
+    heatmapTitle: {
         fontFamily: 'Outfit_700Bold',
         fontSize: 14,
-        color: DesignTokens.colors.text,
-        letterSpacing: 0.5,
-        marginBottom: 16,
+        color: '#1e293b',
+        marginBottom: 12,
+    },
+    heatmapTable: {
+        borderRadius: 8,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
     },
     heatmapRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 2,
     },
-    heatmapRowHighlight: {
-        backgroundColor: '#fef3c7',
-        borderLeftWidth: 3,
-        borderLeftColor: '#f59e0b',
+    heatmapRowWarning: {
+        backgroundColor: '#fffbeb',
     },
     heatmapCell: {
         flex: 1,
-        paddingVertical: 8,
-        paddingHorizontal: 4,
-        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 6,
         justifyContent: 'center',
-        minWidth: 50,
+        alignItems: 'center',
     },
-    heatmapHeader: {
-        fontFamily: 'Outfit_700Bold',
-        fontSize: 11,
-        color: DesignTokens.colors.text,
+    heatmapHeaderCell: {
         backgroundColor: '#f1f5f9',
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 12,
+        color: '#475569',
     },
     heatmapScore: {
         fontFamily: 'Outfit_700Bold',
         fontSize: 14,
         color: '#fff',
     },
-    concernItem: {
-        paddingVertical: 6,
+
+    // Concerns
+    concernsBox: {
+        marginTop: 16,
+        backgroundColor: '#fffbeb',
+        padding: 16,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#fbbf24',
     },
-    concernText: {
+    concernsTitle: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 14,
+        color: '#92400e',
+        marginBottom: 8,
+    },
+    concernItem: {
         fontFamily: 'Outfit_400Regular',
         fontSize: 13,
-        color: '#92400e',
+        color: '#78350f',
+        marginBottom: 4,
     },
-    emptyState: {
+
+    // Empty Report
+    emptyReport: {
         alignItems: 'center',
-        paddingVertical: 40,
+        paddingVertical: 32,
     },
-    emptyEmoji: {
-        fontSize: 48,
+    emptyIcon: {
+        fontSize: 40,
         marginBottom: 12,
     },
-    emptyText: {
+    emptyTitle: {
         fontFamily: 'Outfit_600SemiBold',
         fontSize: 16,
-        color: DesignTokens.colors.text,
+        color: '#64748b',
     },
-    emptySubtext: {
+    emptyDesc: {
         fontFamily: 'Outfit_400Regular',
-        fontSize: 14,
-        color: DesignTokens.colors.textLight,
+        fontSize: 13,
+        color: '#94a3b8',
         marginTop: 4,
+    },
+
+    // Toast
+    toast: {
+        position: 'absolute',
+        bottom: 24,
+        left: 20,
+        right: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: 10,
+        gap: 10,
+        zIndex: 100,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    toastText: {
+        fontFamily: 'Outfit_500Medium',
+        fontSize: 14,
+        color: '#fff',
+        flex: 1,
     },
 });

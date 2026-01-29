@@ -1069,7 +1069,20 @@ IMPORTANT:
 
     // Parse JSON response
     const cleanJson = responseText.replace(/```json\n?|\n?```/g, '').trim();
-    const evalResult = JSON.parse(cleanJson);
+    let evalResult;
+    try {
+        evalResult = JSON.parse(cleanJson);
+    } catch (e) {
+        console.error('Failed to parse scoring JSON:', cleanJson);
+        return {
+            scores: { voiceFidelity: 1, worldIntegrity: 1, boundaryAwareness: 1, ageAppropriateness: 1, emotionalSafety: 1, engagementQuality: 1, metaHandling: 1 },
+            feedback: { voiceFidelity: "Parsing Error", worldIntegrity: "Parsing Error", boundaryAwareness: "Parsing Error", ageAppropriateness: "Parsing Error", emotionalSafety: "Parsing Error", engagementQuality: "Parsing Error", metaHandling: "Parsing Error" },
+            totalScore: 7,
+            passed: false,
+            rating: 'not_ready',
+            suggestions: ['System Error: Malformed JSON response from evaluator']
+        };
+    }
 
     // Calculate rating tier
     const totalScore = evalResult.totalScore || 0;
@@ -1484,7 +1497,7 @@ export const scoreStressTestBatch = onCall({ cors: true, secrets: [geminiApiKey]
  * - Claude: Teacher Judge  
  * - Gemini: Librarian Judge
  */
-export const runExternalJudges = onCall({ cors: true, secrets: [geminiApiKey, openaiApiKey, anthropicApiKey] }, async (request) => {
+export const runExternalJudges = onCall({ cors: true, timeoutSeconds: 540, secrets: [geminiApiKey, openaiApiKey, anthropicApiKey] }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'Must be authenticated.');
     }
@@ -1521,11 +1534,17 @@ Return ONLY valid JSON:
 }`;
 
     try {
+        console.log('[runExternalJudges] Starting for character:', characterId, 'batch:', batchId);
+
         // Initialize all providers
+        console.log('[runExternalJudges] Initializing Gemini...');
         const gemini = new GoogleGenerativeAI(geminiApiKey.value());
         const geminiModel = gemini.getGenerativeModel({ model: "gemini-2.0-flash" });
 
+        console.log('[runExternalJudges] Initializing OpenAI...');
         const openai = new OpenAI({ apiKey: openaiApiKey.value() });
+
+        console.log('[runExternalJudges] Initializing Anthropic...');
         const anthropic = new Anthropic({ apiKey: anthropicApiKey.value() });
 
         // Fetch all conversations in batch
@@ -1662,8 +1681,10 @@ Return ONLY valid JSON:
         };
 
     } catch (error: any) {
-        console.error("runExternalJudges Error:", error);
-        throw new HttpsError('internal', 'Failed to run external judges.', error.message);
+        console.error("[runExternalJudges] FATAL ERROR:", error);
+        console.error("[runExternalJudges] Error message:", error.message);
+        console.error("[runExternalJudges] Error stack:", error.stack);
+        throw new HttpsError('internal', `Failed to run external judges: ${error.message}`);
     }
 });
 
