@@ -37,8 +37,10 @@ type JudgeResult = {
     convId: string;
     category: string;
     scores?: Record<string, number>;
+    feedback?: Record<string, string>;
     totalScore?: number;
     concerns?: string[];
+    suggestions?: string[];
     verdict?: string;
     error?: string;
 };
@@ -129,6 +131,9 @@ export default function ReviewBoardDashboard() {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [showConvModal, setShowConvModal] = useState(false);
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
+
+    // Dimension drill-down state
+    const [selectedDimension, setSelectedDimension] = useState<string | null>(null);
 
     // Toast state
     const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
@@ -281,6 +286,58 @@ export default function ReviewBoardDashboard() {
             }
         }
         return [...new Set(concerns)].filter(c => c && c !== 'List any specific concerns');
+    };
+
+    // Get detailed insights for a dimension
+    const getDimensionInsights = (dim: string) => {
+        const insights: {
+            judgeFeedback: { judge: string; score: number; feedback: string }[];
+            lowScorers: { convId: string; category: string; score: number }[];
+            allSuggestions: string[];
+        } = {
+            judgeFeedback: [],
+            lowScorers: [],
+            allSuggestions: []
+        };
+
+        for (const judge of judges) {
+            const avg = getAverageScores(judge)[dim];
+
+            // Aggregate feedback from results
+            const feedbackTexts: string[] = [];
+            for (const r of judge.results) {
+                if (r.feedback?.[dim]) {
+                    feedbackTexts.push(r.feedback[dim]);
+                }
+                // Track low scorers
+                if (r.scores?.[dim] && r.scores[dim] <= 3) {
+                    insights.lowScorers.push({
+                        convId: r.convId,
+                        category: r.category,
+                        score: r.scores[dim]
+                    });
+                }
+                // Collect suggestions
+                if (r.suggestions) {
+                    insights.allSuggestions.push(...r.suggestions);
+                }
+            }
+
+            insights.judgeFeedback.push({
+                judge: judge.judgeId === 'arlea' ? 'ARLEA' :
+                    judge.judgeId.includes('parent') ? 'Parent (GPT-4)' :
+                        judge.judgeId.includes('teacher') ? 'Teacher (Claude)' : 'Librarian (Gemini)',
+                score: avg,
+                feedback: feedbackTexts[0] || 'No specific feedback available'
+            });
+        }
+
+        // Dedupe suggestions
+        insights.allSuggestions = [...new Set(insights.allSuggestions)]
+            .filter(s => s && !s.includes('Suggestion'))
+            .slice(0, 5);
+
+        return insights;
     };
 
     // Determine current step
@@ -494,8 +551,14 @@ export default function ReviewBoardDashboard() {
                                     {DIMENSION_KEYS.map(dim => {
                                         const scores = judges.map(j => getAverageScores(j)[dim]);
                                         const hasVariance = Math.max(...scores) - Math.min(...scores) > 1;
+                                        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
                                         return (
-                                            <View key={dim} style={[styles.heatmapRow, hasVariance && styles.heatmapRowWarning]}>
+                                            <TouchableOpacity
+                                                key={dim}
+                                                style={[styles.heatmapRow, hasVariance && styles.heatmapRowWarning, avgScore < 4 && styles.heatmapRowClickable]}
+                                                onPress={() => setSelectedDimension(dim)}
+                                                activeOpacity={0.7}
+                                            >
                                                 <Text style={[styles.heatmapCell, { flex: 1.5, fontWeight: '500' }]}>
                                                     {DIMENSION_LABELS[dim]}
                                                 </Text>
@@ -508,7 +571,8 @@ export default function ReviewBoardDashboard() {
                                                     );
                                                 })}
                                                 {hasVariance && <Ionicons name="warning" size={14} color="#f59e0b" />}
-                                            </View>
+                                                <Ionicons name="chevron-forward" size={14} color="#94a3b8" style={{ marginLeft: 4 }} />
+                                            </TouchableOpacity>
                                         );
                                     })}
                                 </View>
@@ -598,6 +662,115 @@ export default function ReviewBoardDashboard() {
                                 )}
                             />
                         )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Dimension Insights Modal */}
+            <Modal visible={!!selectedDimension} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { maxHeight: '95%' }]}>
+                        {/* Modal Header */}
+                        <View style={[styles.modalHeader, { backgroundColor: '#fef3c7' }]}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.modalTitle}>
+                                    📊 {selectedDimension ? DIMENSION_LABELS[selectedDimension] : ''} Analysis
+                                </Text>
+                                <Text style={{ fontFamily: 'Outfit_400Regular', fontSize: 12, color: '#92400e', marginTop: 2 }}>
+                                    Click to understand and improve this score
+                                </Text>
+                            </View>
+                            <TouchableOpacity onPress={() => setSelectedDimension(null)}>
+                                <Ionicons name="close" size={24} color="#64748b" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={{ flex: 1, padding: 16 }}>
+                            {selectedDimension && (() => {
+                                const insights = getDimensionInsights(selectedDimension);
+                                return (
+                                    <>
+                                        {/* Judge Scores */}
+                                        <Text style={styles.insightsSectionTitle}>🎯 Judge Scores</Text>
+                                        {insights.judgeFeedback.map((jf, idx) => (
+                                            <View key={idx} style={styles.judgeCard}>
+                                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                                    <Text style={styles.judgeName}>{jf.judge}</Text>
+                                                    <View style={[styles.scoreBadge, { backgroundColor: getScoreColor(jf.score) }]}>
+                                                        <Text style={styles.scoreBadgeText}>{jf.score.toFixed(1)}</Text>
+                                                    </View>
+                                                </View>
+                                                <Text style={styles.judgeFeedbackText}>{jf.feedback}</Text>
+                                            </View>
+                                        ))}
+
+                                        {/* Low Scorers */}
+                                        {insights.lowScorers.length > 0 && (
+                                            <>
+                                                <Text style={styles.insightsSectionTitle}>⚠️ Scenarios That Scored Low</Text>
+                                                <View style={styles.lowScorersContainer}>
+                                                    {insights.lowScorers.slice(0, 5).map((ls, idx) => {
+                                                        const conv = conversations.find(c => c.id === ls.convId);
+                                                        return (
+                                                            <TouchableOpacity
+                                                                key={idx}
+                                                                style={styles.lowScorerItem}
+                                                                onPress={() => {
+                                                                    if (conv) {
+                                                                        setSelectedDimension(null);
+                                                                        setSelectedConv(conv);
+                                                                        setShowConvModal(true);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <View style={[styles.scoreBadge, { backgroundColor: getScoreColor(ls.score), width: 28, height: 28 }]}>
+                                                                    <Text style={[styles.scoreBadgeText, { fontSize: 12 }]}>{ls.score}</Text>
+                                                                </View>
+                                                                <View style={{ flex: 1 }}>
+                                                                    <Text style={styles.lowScorerCategory}>{ls.category}</Text>
+                                                                    <Text style={styles.lowScorerPreview} numberOfLines={1}>
+                                                                        {conv?.transcript[0]?.text || 'View conversation'}
+                                                                    </Text>
+                                                                </View>
+                                                                <Ionicons name="eye-outline" size={16} color="#8b5cf6" />
+                                                            </TouchableOpacity>
+                                                        );
+                                                    })}
+                                                </View>
+                                            </>
+                                        )}
+
+                                        {/* Suggestions */}
+                                        {insights.allSuggestions.length > 0 && (
+                                            <>
+                                                <Text style={styles.insightsSectionTitle}>💡 How to Improve</Text>
+                                                <View style={styles.suggestionsContainer}>
+                                                    {insights.allSuggestions.map((s, idx) => (
+                                                        <View key={idx} style={styles.suggestionItem}>
+                                                            <View style={styles.suggestionNumber}>
+                                                                <Text style={styles.suggestionNumberText}>{idx + 1}</Text>
+                                                            </View>
+                                                            <Text style={styles.suggestionText}>{s}</Text>
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            </>
+                                        )}
+
+                                        {/* Action */}
+                                        <View style={styles.actionBox}>
+                                            <Text style={styles.actionTitle}>🔄 Reinforcement Loop</Text>
+                                            <Text style={styles.actionDesc}>
+                                                1. Review the low-scoring scenarios above{'\n'}
+                                                2. Update your character's personality, boundaries, or speaking style{'\n'}
+                                                3. Generate a new stress test batch{'\n'}
+                                                4. Run judges again to see improvement
+                                            </Text>
+                                        </View>
+                                    </>
+                                );
+                            })()}
+                        </ScrollView>
                     </View>
                 </View>
             </Modal>
@@ -1067,6 +1240,126 @@ const styles = StyleSheet.create({
         fontFamily: 'Outfit_400Regular',
         fontSize: 14,
         color: '#334155',
+        lineHeight: 20,
+    },
+
+    // Heatmap clickable
+    heatmapRowClickable: {
+        borderWidth: 1,
+        borderColor: '#fbbf24',
+    },
+
+    // Dimension Insights
+    insightsSectionTitle: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 15,
+        color: '#1e293b',
+        marginTop: 16,
+        marginBottom: 12,
+    },
+    judgeCard: {
+        backgroundColor: '#f8fafc',
+        padding: 14,
+        borderRadius: 10,
+        marginBottom: 10,
+    },
+    judgeName: {
+        fontFamily: 'Outfit_600SemiBold',
+        fontSize: 14,
+        color: '#475569',
+    },
+    scoreBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scoreBadgeText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 14,
+        color: '#fff',
+    },
+    judgeFeedbackText: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 13,
+        color: '#64748b',
+        lineHeight: 19,
+    },
+    lowScorersContainer: {
+        backgroundColor: '#fef2f2',
+        borderRadius: 10,
+        padding: 8,
+    },
+    lowScorerItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 10,
+        backgroundColor: '#fff',
+        borderRadius: 8,
+        marginBottom: 6,
+        gap: 10,
+    },
+    lowScorerCategory: {
+        fontFamily: 'Outfit_600SemiBold',
+        fontSize: 13,
+        color: '#334155',
+        textTransform: 'capitalize',
+    },
+    lowScorerPreview: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 11,
+        color: '#94a3b8',
+    },
+    suggestionsContainer: {
+        backgroundColor: '#ecfdf5',
+        borderRadius: 10,
+        padding: 12,
+    },
+    suggestionItem: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 10,
+        gap: 10,
+    },
+    suggestionNumber: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: '#10b981',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    suggestionNumberText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 11,
+        color: '#fff',
+    },
+    suggestionText: {
+        flex: 1,
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 13,
+        color: '#065f46',
+        lineHeight: 18,
+    },
+    actionBox: {
+        backgroundColor: '#eff6ff',
+        borderRadius: 10,
+        padding: 16,
+        marginTop: 16,
+        borderWidth: 1,
+        borderColor: '#3b82f6',
+    },
+    actionTitle: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 14,
+        color: '#1e40af',
+        marginBottom: 8,
+    },
+    actionDesc: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 13,
+        color: '#3b82f6',
         lineHeight: 20,
     },
 });
