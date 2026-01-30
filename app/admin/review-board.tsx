@@ -6,12 +6,13 @@ import {
     ActivityIndicator,
     Animated,
     FlatList,
+    Modal,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
-    useWindowDimensions,
+    useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { TopNav } from '../../components/TopNav';
@@ -46,6 +47,12 @@ type JudgeData = {
     judgeId: string;
     judgeName: string;
     results: JudgeResult[];
+};
+
+type Conversation = {
+    id: string;
+    category: string;
+    transcript: { sender: string; text: string }[];
 };
 
 type ToastType = 'success' | 'error' | 'info';
@@ -118,6 +125,11 @@ export default function ReviewBoardDashboard() {
     const [generating, setGenerating] = useState(false);
     const [scoring, setScoring] = useState(false);
 
+    // Conversation viewer state
+    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [showConvModal, setShowConvModal] = useState(false);
+    const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
+
     // Toast state
     const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
         message: '', type: 'info', visible: false
@@ -168,24 +180,33 @@ export default function ReviewBoardDashboard() {
         fetchBatches();
     }, [selectedCharacter]);
 
-    // Fetch judge data when batch changes
+    // Fetch judge data and conversations when batch changes
     useEffect(() => {
         if (!selectedCharacter || !selectedBatch) {
             setJudges([]);
+            setConversations([]);
             return;
         }
-        const fetchJudges = async () => {
+        const fetchData = async () => {
             try {
+                // Fetch judges
                 const judgesSnap = await getDocs(
                     collection(db, 'characters', selectedCharacter.id, 'stress_tests', selectedBatch.id, 'judges')
                 );
                 setJudges(judgesSnap.docs.map(d => d.data() as JudgeData));
+
+                // Fetch conversations
+                const convSnap = await getDocs(
+                    collection(db, 'characters', selectedCharacter.id, 'stress_tests', selectedBatch.id, 'conversations')
+                );
+                setConversations(convSnap.docs.map(d => ({ id: d.id, ...d.data() } as Conversation)));
             } catch (e) {
                 console.error(e);
                 setJudges([]);
+                setConversations([]);
             }
         };
-        fetchJudges();
+        fetchData();
     }, [selectedBatch]);
 
     const handleGenerateStressTest = async () => {
@@ -382,7 +403,18 @@ export default function ReviewBoardDashboard() {
                     {/* Batch Selector */}
                     {batches.length > 0 && (
                         <View style={styles.batchSelector}>
-                            <Text style={styles.batchLabel}>EXISTING BATCHES</Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Text style={styles.batchLabel}>EXISTING BATCHES</Text>
+                                {selectedBatch && conversations.length > 0 && (
+                                    <TouchableOpacity
+                                        style={styles.viewScenariosBtn}
+                                        onPress={() => setShowConvModal(true)}
+                                    >
+                                        <Ionicons name="eye-outline" size={14} color="#8b5cf6" />
+                                        <Text style={styles.viewScenariosBtnText}>View Scenarios</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
                             <FlatList
                                 data={batches}
                                 horizontal
@@ -501,6 +533,74 @@ export default function ReviewBoardDashboard() {
                     )}
                 </View>
             </ScrollView>
+
+            {/* Conversations Modal */}
+            <Modal visible={showConvModal} animationType="slide" transparent>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        {/* Modal Header */}
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>
+                                {selectedConv ? `Scenario: ${selectedConv.category}` : '📋 Stress Test Scenarios'}
+                            </Text>
+                            <TouchableOpacity onPress={() => {
+                                if (selectedConv) {
+                                    setSelectedConv(null);
+                                } else {
+                                    setShowConvModal(false);
+                                }
+                            }}>
+                                <Ionicons name={selectedConv ? "arrow-back" : "close"} size={24} color="#64748b" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Modal Body */}
+                        {selectedConv ? (
+                            // Show transcript
+                            <ScrollView style={styles.transcriptContainer}>
+                                {selectedConv.transcript.map((msg, idx) => (
+                                    <View
+                                        key={idx}
+                                        style={[
+                                            styles.messageBubble,
+                                            msg.sender === 'user' ? styles.userBubble : styles.charBubble
+                                        ]}
+                                    >
+                                        <Text style={styles.messageSender}>
+                                            {msg.sender === 'user' ? '👧 Child' : '🎭 Character'}
+                                        </Text>
+                                        <Text style={styles.messageText}>{msg.text}</Text>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        ) : (
+                            // Show scenario list
+                            <FlatList
+                                data={conversations}
+                                keyExtractor={(item) => item.id}
+                                contentContainerStyle={{ padding: 8 }}
+                                renderItem={({ item, index }) => (
+                                    <TouchableOpacity
+                                        style={styles.scenarioItem}
+                                        onPress={() => setSelectedConv(item)}
+                                    >
+                                        <View style={styles.scenarioNumber}>
+                                            <Text style={styles.scenarioNumberText}>{index + 1}</Text>
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.scenarioCategory}>{item.category}</Text>
+                                            <Text style={styles.scenarioPreview} numberOfLines={1}>
+                                                {item.transcript[0]?.text || 'No messages'}
+                                            </Text>
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+                                    </TouchableOpacity>
+                                )}
+                            />
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -850,5 +950,123 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#fff',
         flex: 1,
+    },
+
+    // View Scenarios Button
+    viewScenariosBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        backgroundColor: '#ede9fe',
+    },
+    viewScenariosBtnText: {
+        fontFamily: 'Outfit_600SemiBold',
+        fontSize: 11,
+        color: '#8b5cf6',
+    },
+
+    // Modal
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '90%',
+        overflow: 'hidden',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#f1f5f9',
+    },
+    modalTitle: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 18,
+        color: '#1e293b',
+        flex: 1,
+    },
+
+    // Scenario List
+    scenarioItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        marginBottom: 8,
+        backgroundColor: '#f8fafc',
+        borderRadius: 10,
+        gap: 12,
+    },
+    scenarioNumber: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#8b5cf6',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scenarioNumberText: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 14,
+        color: '#fff',
+    },
+    scenarioCategory: {
+        fontFamily: 'Outfit_600SemiBold',
+        fontSize: 14,
+        color: '#334155',
+        textTransform: 'capitalize',
+    },
+    scenarioPreview: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 12,
+        color: '#94a3b8',
+        marginTop: 2,
+    },
+
+    // Transcript
+    transcriptContainer: {
+        flex: 1,
+        padding: 16,
+    },
+    messageBubble: {
+        padding: 12,
+        borderRadius: 12,
+        marginBottom: 12,
+        maxWidth: '85%',
+    },
+    userBubble: {
+        backgroundColor: '#ede9fe',
+        alignSelf: 'flex-end',
+        borderBottomRightRadius: 4,
+    },
+    charBubble: {
+        backgroundColor: '#f1f5f9',
+        alignSelf: 'flex-start',
+        borderBottomLeftRadius: 4,
+    },
+    messageSender: {
+        fontFamily: 'Outfit_600SemiBold',
+        fontSize: 11,
+        color: '#64748b',
+        marginBottom: 4,
+    },
+    messageText: {
+        fontFamily: 'Outfit_400Regular',
+        fontSize: 14,
+        color: '#334155',
+        lineHeight: 20,
     },
 });

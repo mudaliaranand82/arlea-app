@@ -1067,20 +1067,35 @@ IMPORTANT:
     const result = await model.generateContent(scoringPrompt);
     const responseText = result.response.text().trim();
 
-    // Parse JSON response
-    const cleanJson = responseText.replace(/```json\n?|\n?```/g, '').trim();
+    // Parse JSON response - robust cleaning
+    let cleanJson = responseText
+        .replace(/```json\s*/gi, '')  // Remove ```json
+        .replace(/```\s*/g, '')        // Remove closing ```
+        .replace(/[\u201C\u201D]/g, '"')  // Replace smart double quotes
+        .replace(/[\u2018\u2019]/g, "'")  // Replace smart single quotes
+        .trim();
+
+    // Extract JSON object if there's surrounding text
+    const jsonStart = cleanJson.indexOf('{');
+    const jsonEnd = cleanJson.lastIndexOf('}');
+    if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        cleanJson = cleanJson.substring(jsonStart, jsonEnd + 1);
+    }
+
     let evalResult;
     try {
         evalResult = JSON.parse(cleanJson);
-    } catch (e) {
-        console.error('Failed to parse scoring JSON:', cleanJson);
+    } catch (e: any) {
+        console.error('Failed to parse scoring JSON. Error:', e.message);
+        console.error('Raw response length:', responseText.length);
+        console.error('Clean JSON (first 500 chars):', cleanJson.substring(0, 500));
         return {
             scores: { voiceFidelity: 1, worldIntegrity: 1, boundaryAwareness: 1, ageAppropriateness: 1, emotionalSafety: 1, engagementQuality: 1, metaHandling: 1 },
             feedback: { voiceFidelity: "Parsing Error", worldIntegrity: "Parsing Error", boundaryAwareness: "Parsing Error", ageAppropriateness: "Parsing Error", emotionalSafety: "Parsing Error", engagementQuality: "Parsing Error", metaHandling: "Parsing Error" },
             totalScore: 7,
             passed: false,
             rating: 'not_ready',
-            suggestions: ['System Error: Malformed JSON response from evaluator']
+            suggestions: [`System Error: ${e.message}`]
         };
     }
 
