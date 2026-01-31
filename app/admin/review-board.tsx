@@ -135,6 +135,9 @@ export default function ReviewBoardDashboard() {
     // Dimension drill-down state
     const [selectedDimension, setSelectedDimension] = useState<string | null>(null);
 
+    // Selected judges state
+    const [selectedJudges, setSelectedJudges] = useState<string[]>(['parent', 'teacher', 'librarian']);
+
     // Toast state
     const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
         message: '', type: 'info', visible: false
@@ -238,9 +241,13 @@ export default function ReviewBoardDashboard() {
             await scoreArlea({ characterId: selectedCharacter.id, batchId: selectedBatch.id });
 
             const runJudges = httpsCallable(functions, 'runExternalJudges');
-            await runJudges({ characterId: selectedCharacter.id, batchId: selectedBatch.id });
+            await runJudges({
+                characterId: selectedCharacter.id,
+                batchId: selectedBatch.id,
+                activeJudges: selectedJudges
+            });
 
-            showToast('All judges complete! Loading results...', 'success');
+            showToast('Selected judges complete! Loading results...', 'success');
             setSelectedBatch({ ...selectedBatch });
         } catch (e: any) {
             showToast(`Scoring failed: ${e.message}`, 'error');
@@ -499,12 +506,16 @@ export default function ReviewBoardDashboard() {
                         <Text style={[styles.sectionNumber, { backgroundColor: STEPS[2].color }]}>3</Text>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.sectionTitle}>Run AI Judges</Text>
-                            <Text style={styles.sectionDesc}>Score with GPT-4 (Parent), Claude (Teacher), Gemini (Librarian)</Text>
+                            <Text style={styles.sectionDesc}>Score with selected AI personas</Text>
                         </View>
                         <TouchableOpacity
-                            style={[styles.actionBtn, { backgroundColor: STEPS[2].color }, (scoring || !selectedBatch) && styles.actionBtnDisabled]}
+                            style={[
+                                styles.actionBtn,
+                                { backgroundColor: STEPS[2].color },
+                                (scoring || !selectedBatch || selectedJudges.length === 0) && styles.actionBtnDisabled
+                            ]}
                             onPress={handleScoreBatch}
-                            disabled={scoring || !selectedBatch}
+                            disabled={scoring || !selectedBatch || selectedJudges.length === 0}
                         >
                             {scoring ? (
                                 <ActivityIndicator size="small" color="#fff" />
@@ -512,6 +523,40 @@ export default function ReviewBoardDashboard() {
                                 <Text style={styles.actionBtnText}>⚖️ RUN JUDGES</Text>
                             )}
                         </TouchableOpacity>
+                    </View>
+
+                    {/* Judge Selectors */}
+                    <View style={styles.judgeSelectorContainer}>
+                        {[
+                            { id: 'parent', label: 'Parent Judge (GPT-4)', icon: '👨‍👩‍👧' },
+                            { id: 'teacher', label: 'Teacher Judge (Claude)', icon: '👩‍🏫' },
+                            { id: 'librarian', label: 'Librarian Judge (Gemini)', icon: '📚' }
+                        ].map((judge) => {
+                            const isSelected = selectedJudges.includes(judge.id);
+                            return (
+                                <TouchableOpacity
+                                    key={judge.id}
+                                    style={[styles.judgeToggle, isSelected && styles.judgeToggleActive]}
+                                    onPress={() => {
+                                        if (isSelected) {
+                                            setSelectedJudges(prev => prev.filter(j => j !== judge.id));
+                                        } else {
+                                            setSelectedJudges(prev => [...prev, judge.id]);
+                                        }
+                                    }}
+                                >
+                                    <Text style={styles.judgeToggleIcon}>{judge.icon}</Text>
+                                    <Text style={[styles.judgeToggleLabel, isSelected && styles.judgeToggleLabelActive]}>
+                                        {judge.label}
+                                    </Text>
+                                    <Ionicons
+                                        name={isSelected ? "checkmark-circle" : "ellipse-outline"}
+                                        size={20}
+                                        color={isSelected ? STEPS[2].color : "#cbd5e1"}
+                                    />
+                                </TouchableOpacity>
+                            );
+                        })}
                     </View>
 
                     {scoring && (
@@ -1054,6 +1099,41 @@ const styles = StyleSheet.create({
         fontFamily: 'Outfit_700Bold',
         fontSize: 14,
         color: '#fff',
+    },
+
+    // Judge Selectors
+    judgeSelectorContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+        marginBottom: 20,
+    },
+    judgeToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 12,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        gap: 8,
+    },
+    judgeToggleActive: {
+        borderColor: STEPS[2].color,
+        backgroundColor: '#fdf4ff',
+    },
+    judgeToggleIcon: {
+        fontSize: 18,
+    },
+    judgeToggleLabel: {
+        fontFamily: 'Outfit_500Medium',
+        fontSize: 13,
+        color: '#64748b',
+    },
+    judgeToggleLabelActive: {
+        color: STEPS[2].color,
+        fontFamily: 'Outfit_600SemiBold',
     },
 
     // Concerns

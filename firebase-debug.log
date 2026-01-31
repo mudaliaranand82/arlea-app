@@ -1,0 +1,101 @@
+[debug] [2026-01-31T04:51:15.138Z] ----------------------------------------------------------------------
+[debug] [2026-01-31T04:51:15.170Z] Command:       /opt/homebrew/Cellar/node/24.8.0/bin/node /opt/homebrew/bin/firebase deploy --only functions:runExternalJudges
+[debug] [2026-01-31T04:51:15.171Z] CLI Version:   15.0.0
+[debug] [2026-01-31T04:51:15.171Z] Platform:      darwin
+[debug] [2026-01-31T04:51:15.171Z] Node Version:  v24.8.0
+[debug] [2026-01-31T04:51:15.171Z] Time:          Fri Jan 30 2026 23:51:15 GMT-0500 (Eastern Standard Time)
+[debug] [2026-01-31T04:51:15.171Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-01-31T04:51:16.458Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-01-31T04:51:16.459Z] > authorizing via signed-in user (mudaliaranand@gmail.com)
+[debug] [2026-01-31T04:51:16.459Z] [iam] checking project arlea-b8624 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-01-31T04:51:16.459Z] Checked if tokens are valid: false, expires at: 1769809862704
+[debug] [2026-01-31T04:51:16.459Z] Checked if tokens are valid: false, expires at: 1769809862704
+[debug] [2026-01-31T04:51:16.459Z] > refreshing access token with scopes: []
+[debug] [2026-01-31T04:51:16.460Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-01-31T04:51:16.460Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-01-31T04:51:16.615Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-01-31T04:51:16.616Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-01-31T04:51:16.628Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/arlea-b8624:testIamPermissions [none]
+[debug] [2026-01-31T04:51:16.628Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/arlea-b8624:testIamPermissions x-goog-quota-user=projects/arlea-b8624
+[debug] [2026-01-31T04:51:16.628Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/arlea-b8624:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-01-31T04:51:16.880Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/arlea-b8624:testIamPermissions 200
+[debug] [2026-01-31T04:51:16.880Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/arlea-b8624:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-01-31T04:51:16.880Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:16.880Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:16.880Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/arlea-b8624/serviceAccounts/arlea-b8624@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-01-31T04:51:16.880Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/arlea-b8624/serviceAccounts/arlea-b8624@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-01-31T04:51:17.127Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/arlea-b8624/serviceAccounts/arlea-b8624@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-01-31T04:51:17.127Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/arlea-b8624/serviceAccounts/arlea-b8624@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'arlea-b8624'...
+[info] 
+[info] i  deploying functions 
+[info] Running command: npm --prefix "$RESOURCE_DIR" run build
+[info] ✔  functions: Finished running predeploy script. 
+[debug] [2026-01-31T04:51:19.306Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:19.306Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:19.306Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/arlea-b8624 [none]
+[debug] [2026-01-31T04:51:19.414Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/arlea-b8624 200
+[debug] [2026-01-31T04:51:19.414Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/arlea-b8624 {"projectNumber":"324618642830","projectId":"arlea-b8624","lifecycleState":"ACTIVE","name":"Arlea","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-12-01T01:28:14.925539Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-01-31T04:51:19.415Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:19.415Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:19.415Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/arlea-b8624/adminSdkConfig [none]
+[debug] [2026-01-31T04:51:19.779Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/arlea-b8624/adminSdkConfig 200
+[debug] [2026-01-31T04:51:19.779Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/arlea-b8624/adminSdkConfig {"projectId":"arlea-b8624","storageBucket":"arlea-b8624.firebasestorage.app"}
+[debug] [2026-01-31T04:51:19.779Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:19.779Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:19.779Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/arlea-b8624/configs [none]
+[debug] [2026-01-31T04:51:19.982Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/arlea-b8624/configs 200
+[debug] [2026-01-31T04:51:19.982Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/arlea-b8624/configs {"configs":[{"name":"projects/arlea-b8624/configs/gemini"}]}
+[debug] [2026-01-31T04:51:19.983Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:19.983Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:19.983Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/arlea-b8624/configs/gemini/variables [none]
+[debug] [2026-01-31T04:51:20.103Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/arlea-b8624/configs/gemini/variables 200
+[debug] [2026-01-31T04:51:20.103Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/arlea-b8624/configs/gemini/variables {"variables":[{"name":"projects/arlea-b8624/configs/gemini/variables/key","updateTime":"2025-12-14T02:35:01.492454635Z"}]}
+[debug] [2026-01-31T04:51:20.104Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:20.104Z] Checked if tokens are valid: true, expires at: 1769838675616
+[debug] [2026-01-31T04:51:20.104Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/arlea-b8624/configs/gemini/variables/key [none]
+[debug] [2026-01-31T04:51:20.232Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/arlea-b8624/configs/gemini/variables/key 200
+[debug] [2026-01-31T04:51:20.232Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/arlea-b8624/configs/gemini/variables/key {"name":"projects/arlea-b8624/configs/gemini/variables/key","updateTime":"2025-12-14T02:35:01.492454635Z","text":"AIzaSyBNsGii19GEJXexCbNQuOIA_f4TFjRBQdE"}
+[debug] [2026-01-31T04:51:20.233Z] Validating nodejs source
+[warn] ⚠  functions: Runtime Node.js 20 will be deprecated on 2026-04-30 and will be decommissioned on 2026-10-30, after which you will not be able to deploy without upgrading. Consider upgrading now to avoid disruption. See https://cloud.google.com/functions/docs/runtime-support for full details on the lifecycle policy 
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[debug] [2026-01-31T04:51:20.653Z] > [functions] package.json contents: {
+  "name": "functions",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@google/generative-ai": "^0.24.1",
+    "firebase-admin": "^11.8.0",
+    "firebase-functions": "^7.0.1",
+    "openai": "^6.16.0"
+  },
+  "devDependencies": {
+    "typescript": "^4.9.0"
+  },
+  "private": true
+}
+[debug] [2026-01-31T04:51:20.653Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2026-01-31T04:51:20.654Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-01-31T04:51:20.664Z] Found firebase-functions binary at '/Users/anandmudaliar/Arlea app/cloud-functions/node_modules/.bin/firebase-functions'
+[info] Serving at port 8009
+
+[debug] [2026-01-31T04:51:21.161Z] Got response from /__/functions.yaml {"endpoints":{"bulkImportCharacters":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"bulkImportCharacters"},"processBookContent":{"availableMemoryMb":512,"timeoutSeconds":300,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"processBookContent"},"chatWithGemini":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"chatWithGemini"},"generateEvalQuestions":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"generateEvalQuestions"},"runEvalConversation":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"runEvalConversation"},"scoreEvalResponses":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"scoreEvalResponses"},"evaluateCurrentConversation":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"evaluateCurrentConversation"},"onEvalCreated":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.created","eventFilters":{"database":"(default)","namespace":"(default)"},"eventFilterPathPatterns":{"document":"characters/{characterId}/evals/{evalId}"},"retry":false},"entryPoint":"onEvalCreated"},"runRegressionSuite":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"runRegressionSuite"},"saveGoldenConversation":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"saveGoldenConversation"},"generateStressTestConversations":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"generateStressTestConversations"},"scoreStressTestBatch":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"scoreStressTestBatch"},"runExternalJudges":{"availableMemoryMb":null,"timeoutSeconds":540,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","secretEnvironmentVariables":[{"key":"GEMINI_API_KEY"},{"key":"OPENAI_API_KEY"},{"key":"ANTHROPIC_API_KEY"}],"labels":{},"callableTrigger":{},"entryPoint":"runExternalJudges"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{},"params":[{"type":"secret","name":"GEMINI_API_KEY"},{"type":"secret","name":"OPENAI_API_KEY"},{"type":"secret","name":"ANTHROPIC_API_KEY"}]}
