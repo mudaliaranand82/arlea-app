@@ -579,6 +579,22 @@ export default function ReviewBoardDashboard() {
 
                     {judges.length > 0 ? (
                         <>
+                            {/* Errors */}
+                            {(() => {
+                                const errors = judges.flatMap(j =>
+                                    j.results.filter(r => r.error).map(r => `${j.judgeName}: ${r.error}`)
+                                );
+                                if (errors.length === 0) return null;
+                                return (
+                                    <View style={[styles.concernsBox, { backgroundColor: '#fef2f2', borderColor: '#fca5a5' }]}>
+                                        <Text style={[styles.concernsTitle, { color: '#b91c1c' }]}>🚫 Judge Errors</Text>
+                                        {errors.map((e, i) => (
+                                            <Text key={i} style={[styles.concernItem, { color: '#7f1d1d' }]}>• {e}</Text>
+                                        ))}
+                                    </View>
+                                );
+                            })()}
+
                             {/* Score Heatmap */}
                             <View style={styles.heatmapContainer}>
                                 <Text style={styles.heatmapTitle}>📊 Score Heatmap</Text>
@@ -594,9 +610,15 @@ export default function ReviewBoardDashboard() {
                                     </View>
                                     {/* Rows */}
                                     {DIMENSION_KEYS.map(dim => {
-                                        const scores = judges.map(j => getAverageScores(j)[dim]);
-                                        const hasVariance = Math.max(...scores) - Math.min(...scores) > 1;
-                                        const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+                                        const scores = judges.map(j => {
+                                            const hasError = j.results.some(r => r.error);
+                                            if (hasError) return -1;
+                                            return getAverageScores(j)[dim];
+                                        });
+                                        const validScores = scores.filter(s => s !== -1);
+                                        const hasVariance = validScores.length > 0 && Math.max(...validScores) - Math.min(...validScores) > 1;
+                                        const avgScore = validScores.length > 0 ? validScores.reduce((a, b) => a + b, 0) / validScores.length : 0;
+
                                         return (
                                             <TouchableOpacity
                                                 key={dim}
@@ -607,7 +629,15 @@ export default function ReviewBoardDashboard() {
                                                 <Text style={[styles.heatmapCell, { flex: 1.5, fontWeight: '500' }]}>
                                                     {DIMENSION_LABELS[dim]}
                                                 </Text>
-                                                {judges.map(j => {
+                                                {judges.map((j, idx) => {
+                                                    const hasError = j.results.some(r => r.error);
+                                                    if (hasError) {
+                                                        return (
+                                                            <View key={j.judgeId} style={[styles.heatmapCell, { backgroundColor: '#fee2e2' }]}>
+                                                                <Text style={styles.heatmapScore}>⚠️</Text>
+                                                            </View>
+                                                        );
+                                                    }
                                                     const avg = getAverageScores(j)[dim];
                                                     return (
                                                         <View key={j.judgeId} style={[styles.heatmapCell, { backgroundColor: getScoreColor(avg) }]}>
