@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, orderBy, query, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import React, { useEffect, useState } from 'react';
 import {
@@ -10,6 +10,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
     useWindowDimensions
@@ -138,6 +139,11 @@ export default function ReviewBoardDashboard() {
     // Selected judges state
     const [selectedJudges, setSelectedJudges] = useState<string[]>(['parent', 'teacher', 'librarian']);
 
+    // Optimization state
+    const [optimizing, setOptimizing] = useState(false);
+    const [showOptimizationModal, setShowOptimizationModal] = useState(false);
+    const [proposal, setProposal] = useState<{ original: string; draft: string; summary: string } | null>(null);
+
     // Toast state
     const [toast, setToast] = useState<{ message: string; type: ToastType; visible: boolean }>({
         message: '', type: 'info', visible: false
@@ -253,6 +259,69 @@ export default function ReviewBoardDashboard() {
             showToast(`Scoring failed: ${e.message}`, 'error');
         } finally {
             setScoring(false);
+        }
+    };
+
+    // Run optimization
+    const handleOptimize = async () => {
+        if (!selectedCharacter || !selectedBatch) return;
+
+        setOptimizing(true);
+        showToast('Analyzing feedback and designing improvements...', 'info');
+
+        try {
+            const optimizeFn = httpsCallable(functions, 'optimizeCharacterPrompt');
+            const result = await optimizeFn({
+                characterId: selectedCharacter.id,
+                batchId: selectedBatch.id
+            });
+            const data = result.data as any;
+
+            if (data.status === 'success') {
+                setProposal({
+                    original: data.originalPrompt,
+                    draft: data.draftPrompt,
+                    summary: data.improvementSummary
+                });
+                setShowOptimizationModal(true);
+                showToast('Optimization proposal ready for review!', 'success');
+            } else {
+                showToast(`Optimization skipped: ${data.message}`, 'info');
+            }
+        } catch (e: any) {
+            showToast(`Optimization failed: ${e.message}`, 'error');
+            console.error(e);
+        } finally {
+            setOptimizing(false);
+        }
+    };
+
+    // Apply optimization
+    const applyOptimization = async () => {
+        if (!selectedCharacter || !proposal) return;
+
+        try {
+            // Update live prompt
+            const charDocRef = doc(db, 'characters', selectedCharacter.id);
+            await updateDoc(charDocRef, {
+                systemPrompt: proposal.draft,
+                updatedAt: new Date()
+            });
+
+            // Reload character list to reflect changes
+            const charRef = collection(db, 'characters');
+            const snapshot = await getDocs(charRef);
+            const chars = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Character));
+            setCharacters(chars);
+
+            // Also update currently selected character local state
+            setSelectedCharacter(prev => prev ? ({ ...prev, systemPrompt: proposal.draft } as any) : null);
+
+            setShowOptimizationModal(false);
+            showToast('Character prompt updated successfully!', 'success');
+
+        } catch (e: any) {
+            showToast(`Failed to update prompt: ${e.message}`, 'error');
         }
     };
 
@@ -571,10 +640,28 @@ export default function ReviewBoardDashboard() {
                 <View style={[styles.section, { borderLeftColor: STEPS[3].color }]}>
                     <View style={styles.sectionHeader}>
                         <Text style={[styles.sectionNumber, { backgroundColor: STEPS[3].color }]}>4</Text>
-                        <View>
+                        <View style={{ flex: 1 }}>
                             <Text style={styles.sectionTitle}>Review Report</Text>
                             <Text style={styles.sectionDesc}>Analyze score variance and aggregated concerns</Text>
                         </View>
+                        {/* Optimization Button - Only show if we have results */}
+                        {judges.length > 0 && (
+                            <TouchableOpacity
+                                style={[
+                                    styles.actionBtn,
+                                    { backgroundColor: '#8b5cf6', marginLeft: 8 },
+                                    optimizing && styles.actionBtnDisabled
+                                ]}
+                                onPress={handleOptimize}
+                                disabled={optimizing}
+                            >
+                                {optimizing ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.actionBtnText}>✨ OPTIMIZE</Text>
+                                )}
+                            </TouchableOpacity>
+                        )}
                     </View>
 
                     {judges.length > 0 ? (
@@ -846,6 +933,73 @@ export default function ReviewBoardDashboard() {
                                 );
                             })()}
                         </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+            <Modal
+                visible={showOptimizationModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowOptimizationModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { maxWidth: 900, width: '90%', height: '85%' }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>✨ Optimization Proposal</Text>
+                            <TouchableOpacity onPress={() => setShowOptimizationModal(false)}>
+                                <Ionicons name="close" size={24} color="#64748b" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.modalBody}>
+                            {/* Summary */}
+                            <View style={[styles.concernsBox, { backgroundColor: '#f0fdf4', borderColor: '#86efac' }]}>
+                                <Text style={[styles.concernsTitle, { color: '#15803d' }]}>🎯 AI Reasoning</Text>
+                                <Text style={[styles.concernItem, { color: '#166534' }]}>{proposal?.summary}</Text>
+                            </View>
+
+                            {/* Diff View */}
+                            <View style={{ flexDirection: 'row', gap: 16, marginTop: 16 }}>
+                                {/* Original */}
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.inputLabel, { color: '#64748b' }]}>Original Prompt</Text>
+                                    <View style={[styles.inputField, { height: 400, backgroundColor: '#f1f5f9' }]}>
+                                        <ScrollView nestedScrollEnabled>
+                                            <Text style={{ color: '#475569', fontFamily: 'monospace' }}>
+                                                {proposal?.original}
+                                            </Text>
+                                        </ScrollView>
+                                    </View>
+                                </View>
+
+                                {/* Draft */}
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.inputLabel, { color: '#8b5cf6' }]}>Proposed V2</Text>
+                                    <TextInput
+                                        style={[styles.inputField, { height: 400, backgroundColor: '#fff', borderColor: '#a78bfa', borderWidth: 2, fontFamily: 'monospace' }]}
+                                        multiline
+                                        value={proposal?.draft}
+                                        onChangeText={(text) => setProposal(prev => prev ? { ...prev, draft: text } : null)}
+                                        textAlignVertical="top"
+                                    />
+                                    <Text style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                                        * You can manually edit this draft before applying
+                                    </Text>
+                                </View>
+                            </View>
+                        </ScrollView>
+
+                        <View style={styles.modalFooter}>
+                            <TouchableOpacity
+                                style={[styles.secondaryBtn, { marginRight: 12 }]}
+                                onPress={() => setShowOptimizationModal(false)}
+                            >
+                                <Text style={styles.secondaryBtnText}>Discard</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.primaryBtn} onPress={applyOptimization}>
+                                <Text style={styles.primaryBtnText}>Apply Changes</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -1387,6 +1541,54 @@ const styles = StyleSheet.create({
     },
     scoreBadgeText: {
         fontFamily: 'Outfit_700Bold',
+        fontSize: 14,
+        color: '#fff',
+    },
+
+    // Optimization
+    modalBody: {
+        flex: 1,
+        padding: 20,
+    },
+    inputLabel: {
+        fontFamily: 'Outfit_700Bold',
+        fontSize: 14,
+        marginBottom: 8,
+    },
+    inputField: {
+        padding: 16,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        lineHeight: 20,
+        fontSize: 14,
+    },
+    modalFooter: {
+        padding: 20,
+        borderTopWidth: 1,
+        borderTopColor: '#f1f5f9',
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+    },
+    secondaryBtn: {
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        backgroundColor: '#f1f5f9',
+        borderRadius: 8,
+    },
+    secondaryBtnText: {
+        fontFamily: 'Outfit_600SemiBold',
+        fontSize: 14,
+        color: '#64748b',
+    },
+    primaryBtn: {
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        backgroundColor: '#8b5cf6',
+        borderRadius: 8,
+    },
+    primaryBtnText: {
+        fontFamily: 'Outfit_600SemiBold',
         fontSize: 14,
         color: '#fff',
     },

@@ -1773,3 +1773,116 @@ Return ONLY valid JSON:
     }
 });
 
+/**
+ * Optimize Character Prompt using Judge Feedback
+ * - Aggregates scores and concerns from the last batch
+ * - Uses Gemini to propose a V2 system prompt
+ * - Returns the draft prompt (does NOT overwrite)
+ */
+export const optimizeCharacterPrompt = onCall({ cors: true, timeoutSeconds: 300, secrets: [geminiApiKey] }, async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Must be authenticated.');
+
+    const { characterId, batchId } = request.data;
+    if (!characterId || !batchId) throw new HttpsError('invalid-argument', 'characterId and batchId required.');
+
+    try {
+        // 1. Fetch Character (current prompt)
+        const charDoc = await db.collection('characters').doc(characterId).get();
+        if (!charDoc.exists) throw new HttpsError('not-found', 'Character not found');
+
+        const character = charDoc.data();
+        const currentPrompt = character?.systemPrompt || "";
+
+        // 2. Fetch Judge Results
+        const judgesSnap = await db.collection('characters').doc(characterId)
+            .collection('stress_tests').doc(batchId)
+            .collection('judges').get();
+
+        const allConcerns: string[] = [];
+        const specificSuggestions: string[] = [];
+        const lowScoreDimensions: string[] = [];
+
+        judgesSnap.docs.forEach(doc => {
+            const data = doc.data();
+            if (data.results) {
+                // Aggregate concerns/suggestions
+                data.results.forEach((r: any) => {
+                    if (r.concerns) allConcerns.push(...r.concerns);
+                    if (r.suggestions) specificSuggestions.push(...r.suggestions);
+
+                    // Track low scores (< 3.5)
+                    if (r.scores) {
+                        Object.entries(r.scores).forEach(([dim, score]: [string, any]) => {
+                            if (typeof score === 'number' && score < 3.5) {
+                                lowScoreDimensions.push(`${dim} (Score: ${score})`);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        // Dedupe
+        const uniqueConcerns = [...new Set(allConcerns)];
+        const uniqueSuggestions = [...new Set(specificSuggestions)];
+        const uniqueLowScores = [...new Set(lowScoreDimensions)];
+
+        if (uniqueConcerns.length === 0 && uniqueLowScores.length === 0) {
+            return {
+                status: 'skipped',
+                message: 'No significant negative feedback found to optimize for.'
+            };
+        }
+
+        // 3. Generate Optimization with Gemini
+        const gemini = new GoogleGenerativeAI(geminiApiKey.value());
+        const model = gemini.getGenerativeModel({ model: "gemini-1.5-pro" }); // Use Pro for better reasoning
+
+        const optimizationPrompt = `
+You are an expert AI Character Designer. Your task is to OPTIMIZE a character's system prompt based on stress-test feedback.
+
+CURRENT SYSTEM PROMPT:
+"""
+${currentPrompt}
+"""
+
+FEEDBACK FROM JUDGES (Issues to fix):
+- Low Scoring Dimensions: ${uniqueLowScores.join(', ') || "None"}
+- Concerns Raised:
+${uniqueConcerns.map(c => `- ${c}`).join('\n')}
+- Specific Suggestions:
+${uniqueSuggestions.map(s => `- ${s}`).join('\n')}
+
+INSTRUCTIONS:
+1. Analyze the feedback. Identify what is missing or weak in the current prompt (e.g., "Violates boundaries", "Voice inconsistency").
+2. Rewrite the system prompt to address these issues while maintaining the core character identity.
+3. Use clear, instruction-based language (e.g., "You must refuse...", "Speak in a... tone").
+4. Return ONLY the new system prompt text. Do not add markdown blocks or explanations.
+`;
+
+        const result = await model.generateContent(optimizationPrompt);
+        const newPrompt = result.response.text().trim();
+
+        // 4. Save Draft
+        await db.collection('characters').doc(characterId).update({
+            draftPrompt: newPrompt,
+            lastOptimizationAnalysis: {
+                batchId,
+                timestamp: admin.firestore.FieldValue.serverTimestamp(),
+                feedbackCount: uniqueConcerns.length
+            }
+        });
+
+        return {
+            status: 'success',
+            originalPrompt: currentPrompt,
+            draftPrompt: newPrompt,
+            improvementSummary: `Addressed ${uniqueConcerns.length} concerns and ${uniqueLowScores.length} low-scoring areas.`
+        };
+
+    } catch (error: any) {
+        console.error("Optimization Failed:", error);
+        throw new HttpsError('internal', error.message);
+    }
+});
+
